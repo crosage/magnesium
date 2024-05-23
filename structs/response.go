@@ -1,7 +1,7 @@
 package structs
 
-type response struct {
-	code int
-	msg  string
-	data interface{}
+type Response struct {
+	Code int
+	Msg  string
+	Data interface{}
 }

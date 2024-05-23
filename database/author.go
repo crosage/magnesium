@@ -28,3 +28,18 @@ func GetAuthorByName(name string) (structs.Author, error) {
 	}
 	return author, nil
 }
+func GetOrCreateAuthor(author structs.Author) (structs.Author, error) {
+	author, err := GetAuthorByName(author.Name)
+	if err == nil {
+		return author, nil
+	} else if err == sql.ErrNoRows {
+		newAuthor := structs.Author{Name: author.Name, UID: author.UID}
+		err = CreateAuthor(newAuthor)
+		if err != nil {
+			return structs.Author{}, err
+		}
+		return newAuthor, nil
+	} else {
+		return structs.Author{}, err
+	}
+}
