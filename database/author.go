@@ -5,16 +5,18 @@ import (
 	"go_/structs"
 )
 
-func CreateAuthor(author structs.Author) error {
-	stmt, err := db.Prepare("INSERT INTO author (name,uid)  VALUES (?,?)")
+func CreateAuthor(author structs.Author) (int, error) {
+	result, err := db.Exec("INSERT INTO author (name, uid) VALUES (?, ?)", author.Name, author.UID)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	_, err = stmt.Exec(author.Name, author.UID)
+
+	id, err := result.LastInsertId()
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+
+	return int(id), nil
 }
 func GetAuthorByName(name string) (structs.Author, error) {
 	var author structs.Author
@@ -29,12 +31,13 @@ func GetAuthorByName(name string) (structs.Author, error) {
 	return author, nil
 }
 func GetOrCreateAuthor(author structs.Author) (structs.Author, error) {
-	author, err := GetAuthorByName(author.Name)
+	existingAuthor, err := GetAuthorByName(author.Name)
 	if err == nil {
-		return author, nil
+		return existingAuthor, nil
 	} else if err == sql.ErrNoRows {
 		newAuthor := structs.Author{Name: author.Name, UID: author.UID}
-		err = CreateAuthor(newAuthor)
+		id, err := CreateAuthor(newAuthor)
+		newAuthor.ID = id
 		if err != nil {
 			return structs.Author{}, err
 		}

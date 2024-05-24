@@ -2,18 +2,20 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
+	"go_/database"
+	"go_/structs"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
-func getTagsFromPid(pid string) (map[string]interface{}, error) {
+func getInformationFromPid(pid int) (map[string]interface{}, error) {
 	proxyURL, err := url.Parse("http://127.0.0.1:7890")
-	url := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%s", pid)
+	url := "https://www.pixiv.net/ajax/illust/" + strconv.Itoa(pid)
 	fmt.Println(url)
 	method := "GET"
 	transport := &http.Transport{
@@ -24,7 +26,6 @@ func getTagsFromPid(pid string) (map[string]interface{}, error) {
 		Transport: transport,
 	}
 	req, err := http.NewRequest(method, url, nil)
-	fmt.Println("*************")
 	if err != nil {
 		return nil, err
 	}
@@ -49,28 +50,56 @@ func getTagsFromPid(pid string) (map[string]interface{}, error) {
 		log.Error().Err(err).Msg("获取Tag时发生错误")
 		return nil, err
 	}
-	return response, nil
+	return response["body"].(map[string]interface{}), nil
+}
+func getTagsFromResult(result map[string]interface{}) []string {
+	var tagNames []string
+	tags, _ := result["tags"].(map[string]interface{})
+	tagList, _ := tags["tags"].([]interface{})
+	for _, tagItem := range tagList {
+		tagMap, _ := tagItem.(map[string]interface{})
+		tagName, _ := tagMap["tag"].(string)
+		tagNames = append(tagNames, tagName)
+	}
+	return tagNames
+}
+func getIllustInformationFromResult(result map[string]interface{}) string {
+	var illustTitle string
+	illustTitle = result["illustTitle"].(string)
+	return illustTitle
+}
+func getUserIdFromResult(result map[string]interface{}) string {
+	var userId string
+	userId = result["userId"].(string)
+	return userId
+}
+func getUserNameFromResult(result map[string]interface{}) string {
+	var userName string
+	userName = result["userName"].(string)
+	return userName
 }
 func pixivHandler(ctx *fiber.Ctx) error {
-	id := ctx.Params("id")
-	result, err := getTagsFromPid(id)
-	body, ok := result["body"].(map[string]interface{})
-	if !ok {
-		return errors.New("未找到body字段或者类型不正确")
-	}
-
-	tags, ok := body["tags"].(map[string]interface{})
-	if !ok {
-		return errors.New("未找到tags字段或者类型不正确")
-	}
-
-	tagList, ok := tags["tags"].([]interface{})
-	if !ok {
-		return errors.New("未找到tags字段或者类型不正确")
-	}
-	fmt.Println(tagList)
+	pidStr := ctx.Params("id")
+	pid, err := strconv.Atoi(pidStr)
+	result, err := getInformationFromPid(pid)
 	if err != nil {
 		return sendCommonResponse(ctx, 500, "", nil)
 	}
-	return nil
+	name := getIllustInformationFromResult(result)
+	author := structs.Author{
+		Name: getUserNameFromResult(result),
+		UID:  getUserIdFromResult(result),
+	}
+	author, err = database.GetOrCreateAuthor(author)
+	_, err = database.CreateImage(pid, name, "", author.ID)
+	tags := getTagsFromResult(result)
+	for _, tag := range tags {
+		tid, err := database.GetorCreateTagIdByName(tag)
+		if err != nil {
+			return sendCommonResponse(ctx, 500, "", nil)
+		}
+		err = database.InsertImageTag(pid, tid)
+	}
+	fmt.Println(tags)
+	return sendCommonResponse(ctx, 200, "", nil)
 }

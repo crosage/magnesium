@@ -1,6 +1,7 @@
 package structs
 
 type Tag struct {
-	ID   int
-	Name string
+	ID            int
+	Name          string
+	TranslateName string
 }

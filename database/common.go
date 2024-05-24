@@ -80,7 +80,7 @@ func createTables() {
 		id INTEGER PRIMARY KEY,
 		image_id INTEGER,
 		tag_id INTEGER,
-		FOREIGN KEY (image_id) REFERENCES image(id),
+		FOREIGN KEY (image_id) REFERENCES image(pid),
 		FOREIGN KEY (tag_id) REFERENCES tag(id)
 	);`)
 	if err != nil {
