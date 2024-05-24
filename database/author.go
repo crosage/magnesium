@@ -30,6 +30,18 @@ func GetAuthorByName(name string) (structs.Author, error) {
 	}
 	return author, nil
 }
+func GetAuthorById(id int) (structs.Author, error) {
+	var author structs.Author
+	row := db.QueryRow("SELECT name,uid from author where id=?", id)
+	err := row.Scan(&author.Name, &author.UID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return author, sql.ErrNoRows
+		}
+		return author, err
+	}
+	return author, nil
+}
 func GetOrCreateAuthor(author structs.Author) (structs.Author, error) {
 	existingAuthor, err := GetAuthorByName(author.Name)
 	if err == nil {

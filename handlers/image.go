@@ -103,3 +103,26 @@ func pixivHandler(ctx *fiber.Ctx) error {
 	fmt.Println(tags)
 	return sendCommonResponse(ctx, 200, "", nil)
 }
+
+func getImageByPid(ctx *fiber.Ctx) error {
+	var image structs.Image
+	var err error
+	pidStr := ctx.Params("pid")
+	pid, err := strconv.Atoi(pidStr)
+	log.Log().Msg("pid=" + pidStr)
+	if err != nil {
+		log.Error().Err(err)
+		return sendCommonResponse(ctx, 500, "转换id有误", nil)
+	}
+	image, err = database.GetImageById(pid)
+	if err != nil {
+		log.Error().Err(err)
+		return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
+	}
+	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
+		"pid":    image.PID,
+		"author": image.Author,
+		"tags":   image.Tags,
+		"path":   image.Path,
+	})
+}

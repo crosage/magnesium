@@ -42,7 +42,7 @@ func createTables() {
 	CREATE TABLE IF NOT EXISTS tag (
 		id INTEGER PRIMARY KEY,
 		name TEXT,
-		translate_name TEXT
+		translate_name TEXT DEFAULT ""
 	);`)
 	if err != nil {
 		log.Fatal().Err(err)
@@ -56,7 +56,7 @@ func createTables() {
 		author_id INTEGER,
 		name TEXT,
 		path TEXT,
-		FOREIGN KEY (author_id) REFERENCES author(id)
+		FOREIGN KEY (author_id) REFERENCES author(id)  ON DELETE CASCADE
 	);`)
 	if err != nil {
 		log.Fatal().Err(err)
@@ -67,8 +67,8 @@ func createTables() {
 	CREATE TABLE IF NOT EXISTS page (
 		id INTEGER PRIMARY KEY,
 		image_id INTEGER,
-		page_num INTEGER,
-		FOREIGN KEY (image_id) REFERENCES image(id)
+		page_id INTEGER,
+		FOREIGN KEY (image_id) REFERENCES image(id) ON DELETE CASCADE 
 	);`)
 	if err != nil {
 		log.Fatal().Err(err)
@@ -80,8 +80,8 @@ func createTables() {
 		id INTEGER PRIMARY KEY,
 		image_id INTEGER,
 		tag_id INTEGER,
-		FOREIGN KEY (image_id) REFERENCES image(pid),
-		FOREIGN KEY (tag_id) REFERENCES tag(id)
+		FOREIGN KEY (image_id) REFERENCES image(pid) ON DELETE CASCADE,
+		FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
 	);`)
 	if err != nil {
 		log.Fatal().Err(err)
