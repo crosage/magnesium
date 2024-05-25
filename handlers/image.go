@@ -8,10 +8,13 @@ import (
 	"github.com/rs/zerolog/log"
 	"go_/database"
 	"go_/structs"
+	"go_/utils"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 var ErrResponseBodyEmpty = errors.New("response body is empty or not a map")
@@ -32,7 +35,7 @@ func getInformationFromPid(pid int) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Cookie", "PHPSESSID=42279487_ixsJf0c7B8Uko3o71Nx8HG0mxg0lrhZo; __cf_bm=GwbgPAFqBwYBMw.02LRDMBquapFwJBKkS232J_w34Hc-1716448255-1.0.1.1-Blm.czHdnfeW0in2mV0UnkFmsKcNO5iUURs8YrHjDXAvGlHW1B5HIoKVH2zQBoGCW6E0frILPI0GWKer8SaxNdsmzN7m4Xd2CijF5hmlhMY; a_type=0; b_type=0; c_type=31; privacy_policy_notification=0; yuid_b=OQQ0UgA")
+	req.Header.Add("Cookie", utils.Cookies)
 	req.Header.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0")
 	req.Header.Add("x-requested-with", "XMLHttpRequest")
 	req.Header.Add("referer", "https://www.pixiv.net/artworks/100000000")
@@ -89,19 +92,25 @@ func getUserNameFromResult(result map[string]interface{}) string {
 	return userName
 }
 func pixivHandler(pid int, path string) error {
+	rand.Seed(time.Now().UnixNano())
+	min := 0.1
+	max := 1.0
+	randomDuration := time.Duration(min*float64(time.Second) + rand.Float64()*(max-min)*float64(time.Second))
+	time.Sleep(randomDuration)
 	exist, err := database.CheckPidExists(pid)
 	if exist == true {
 		return nil
 	}
 	result, err := getInformationFromPid(pid)
 	if err != nil {
-		_, err = database.CreateImage(pid, "", path, 0)
+		//_, err = database.CreateImage(pid, "", path, 0)
 		if errors.Is(err, ErrResponseBodyEmpty) {
-			tid, err := database.GetOrCreateTagIdByName("由于作者删除该作品无法获得tag")
-			if err != nil {
-				return err
-			}
-			err = database.InsertImageTag(pid, tid)
+			fmt.Println("passsss")
+			//tid, err := database.GetOrCreateTagIdByName("由于作者删除该作品无法获得tag")
+			//if err != nil {
+			//	return err
+			//}
+			//err = database.InsertImageTag(pid, tid)
 		}
 		return err
 	}
