@@ -2,7 +2,7 @@ package database
 
 import "database/sql"
 
-func GetorCreateTagIdByName(name string) (int, error) {
+func GetOrCreateTagIdByName(name string) (int, error) {
 	var id int
 	err := db.QueryRow("SELECT id FROM tag WHERE name = ?", name).Scan(&id)
 	if err != nil {

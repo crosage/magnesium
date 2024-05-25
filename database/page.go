@@ -4,8 +4,8 @@ import (
 	"go_/structs"
 )
 
-func InsertPageByPid(imageID, pageNum int) (int, error) {
-	result, err := db.Exec("INSERT INTO page (image_id, page_num) VALUES (?, ?)", imageID, pageNum)
+func InsertPageByPid(pid int, pageId int) (int, error) {
+	result, err := db.Exec("INSERT INTO page (image_id, page_num) VALUES (?, ?)", pid, pageId)
 	if err != nil {
 		return 0, err
 	}

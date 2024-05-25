@@ -16,8 +16,7 @@ func InitHandlers(app *fiber.App) {
 	app.Post("/api/gallery", createGallery)
 	app.Get("/api/gallery", getAllGalleries)
 	app.Delete("/api/gallery", deleteGallery)
-
-	app.Get("/api/pixiv/:id", pixivHandler)
+	app.Get("/api/gallery/:id/init", initGallery)
 
 	app.Get("/api/image/:pid", getImageByPid)
 }

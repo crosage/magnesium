@@ -36,3 +36,13 @@ func GetImageById(pid int) (structs.Image, error) {
 	}
 	return image, nil
 }
+
+func CheckPidExists(pid int) (bool, error) {
+	var exists bool
+	query := "SELECT EXISTS(SELECT 1 FROM image WHERE pid=?)"
+	err := db.QueryRow(query, pid).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}

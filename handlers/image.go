@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
@@ -12,6 +13,8 @@ import (
 	"net/url"
 	"strconv"
 )
+
+var ErrResponseBodyEmpty = errors.New("response body is empty or not a map")
 
 func getInformationFromPid(pid int) (map[string]interface{}, error) {
 	proxyURL, err := url.Parse("http://127.0.0.1:7890")
@@ -50,7 +53,14 @@ func getInformationFromPid(pid int) (map[string]interface{}, error) {
 		log.Error().Err(err).Msg("获取Tag时发生错误")
 		return nil, err
 	}
-	return response["body"].(map[string]interface{}), nil
+	bodyContent, ok := response["body"].(map[string]interface{})
+	if !ok || bodyContent == nil {
+		log.Error().Msg("response body is empty or not a map")
+		// 在这里可以返回一个特殊的错误或 nil, nil，取决于你的需求
+		return nil, ErrResponseBodyEmpty
+	}
+
+	return bodyContent, nil
 }
 func getTagsFromResult(result map[string]interface{}) []string {
 	var tagNames []string
@@ -78,12 +88,22 @@ func getUserNameFromResult(result map[string]interface{}) string {
 	userName = result["userName"].(string)
 	return userName
 }
-func pixivHandler(ctx *fiber.Ctx) error {
-	pidStr := ctx.Params("id")
-	pid, err := strconv.Atoi(pidStr)
+func pixivHandler(pid int, path string) error {
+	exist, err := database.CheckPidExists(pid)
+	if exist == true {
+		return nil
+	}
 	result, err := getInformationFromPid(pid)
 	if err != nil {
-		return sendCommonResponse(ctx, 500, "", nil)
+		_, err = database.CreateImage(pid, "", path, 0)
+		if errors.Is(err, ErrResponseBodyEmpty) {
+			tid, err := database.GetOrCreateTagIdByName("由于作者删除该作品无法获得tag")
+			if err != nil {
+				return err
+			}
+			err = database.InsertImageTag(pid, tid)
+		}
+		return err
 	}
 	name := getIllustInformationFromResult(result)
 	author := structs.Author{
@@ -91,17 +111,17 @@ func pixivHandler(ctx *fiber.Ctx) error {
 		UID:  getUserIdFromResult(result),
 	}
 	author, err = database.GetOrCreateAuthor(author)
-	_, err = database.CreateImage(pid, name, "", author.ID)
+	_, err = database.CreateImage(pid, name, path, author.ID)
 	tags := getTagsFromResult(result)
 	for _, tag := range tags {
-		tid, err := database.GetorCreateTagIdByName(tag)
+		tid, err := database.GetOrCreateTagIdByName(tag)
 		if err != nil {
-			return sendCommonResponse(ctx, 500, "", nil)
+			return err
 		}
 		err = database.InsertImageTag(pid, tid)
 	}
 	fmt.Println(tags)
-	return sendCommonResponse(ctx, 200, "", nil)
+	return nil
 }
 
 func getImageByPid(ctx *fiber.Ctx) error {

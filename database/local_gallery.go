@@ -24,6 +24,12 @@ func GetAllGalleries() ([]structs.LocalGallery, error) {
 	return galleries, nil
 }
 
+func GetGalleryById(id int) (structs.LocalGallery, error) {
+	var gallery structs.LocalGallery
+	row := db.QueryRow("SELECT id,path FROM local_gallery WHERE id=?", id)
+	err := row.Scan(&gallery.ID, &gallery.Path)
+	return gallery, err
+}
 func CreateLocalGalleryPath(path string) error {
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM local_gallery WHERE path = ?", path).Scan(&count)
