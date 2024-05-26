@@ -2,8 +2,8 @@ package database
 
 import "go_/structs"
 
-func CreateImage(pid int, name string, path string, authorId int) (int, error) {
-	result, err := db.Exec("INSERT INTO image(pid,author_id,name,path) VALUES (?,?,?,?)", pid, authorId, name, path)
+func CreateImage(pid int, name string, path string, authorId int, fileType string) (int, error) {
+	result, err := db.Exec("INSERT INTO image(pid,author_id,name,path,file_type) VALUES (?,?,?,?,?)", pid, authorId, name, path, fileType)
 	if err != nil {
 		return 0, err
 	}
@@ -17,11 +17,11 @@ func GetImageById(pid int) (structs.Image, error) {
 	var image structs.Image
 	var err error
 	row := db.QueryRow(`
-		SELECT id,pid,author_id,name,path
+		SELECT id,pid,author_id,name,path,file_type
 		FROM image
 		WHERE pid=?
 	`, pid)
-	row.Scan(&image.ID, &image.PID, &image.Author.ID, &image.Name, &image.Path)
+	row.Scan(&image.ID, &image.PID, &image.Author.ID, &image.Name, &image.Path, &image.FileType)
 	image.Author, err = GetAuthorById(image.Author.ID)
 	if err != nil {
 		return image, err

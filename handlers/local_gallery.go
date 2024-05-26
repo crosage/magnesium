@@ -58,12 +58,13 @@ func initGallery(ctx *fiber.Ctx) error {
 
 		// 打印文件名
 		if !info.IsDir() {
-			re := regexp.MustCompile(`(\d+)_p(\d+)\.\w+`)
+			re := regexp.MustCompile(`(\d+)_p(\d+)\.(\w+)`)
 			match := re.FindStringSubmatch(info.Name())
 			if match != nil {
 				pid, _ := strconv.Atoi(match[1])
 				pageId, _ := strconv.Atoi(match[2])
-				err := pixivHandler(pid, folderPath.Path)
+				fileType := match[3]
+				err := pixivHandler(pid, folderPath.Path, fileType)
 				if err != nil {
 					return sendCommonResponse(ctx, 500, "爬虫过程出现错误", nil)
 				}

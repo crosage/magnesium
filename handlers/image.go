@@ -91,7 +91,7 @@ func getUserNameFromResult(result map[string]interface{}) string {
 	userName = result["userName"].(string)
 	return userName
 }
-func pixivHandler(pid int, path string) error {
+func pixivHandler(pid int, path string, fileType string) error {
 	rand.Seed(time.Now().UnixNano())
 	min := 0.1
 	max := 1.0
@@ -120,7 +120,7 @@ func pixivHandler(pid int, path string) error {
 		UID:  getUserIdFromResult(result),
 	}
 	author, err = database.GetOrCreateAuthor(author)
-	_, err = database.CreateImage(pid, name, path, author.ID)
+	_, err = database.CreateImage(pid, name, path, author.ID, fileType)
 	tags := getTagsFromResult(result)
 	for _, tag := range tags {
 		tid, err := database.GetOrCreateTagIdByName(tag)

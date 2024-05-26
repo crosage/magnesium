@@ -56,6 +56,7 @@ func createTables() {
 		author_id INTEGER,
 		name TEXT,
 		path TEXT,
+		file_type TEXT,
 		FOREIGN KEY (author_id) REFERENCES author(id)  ON DELETE CASCADE
 	);`)
 	if err != nil {

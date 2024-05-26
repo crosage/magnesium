@@ -5,14 +5,28 @@ import (
 )
 
 func InsertPageByPid(pid int, pageId int) (int, error) {
+	// 检查记录是否已经存在
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM page WHERE image_id = ? AND page_id = ?)", pid, pageId).Scan(&exists)
+	if err != nil {
+		return 0, err
+	}
+	if exists {
+		return 0, nil
+	}
+
+	// 如果记录不存在，则插入新记录
 	result, err := db.Exec("INSERT INTO page (image_id, page_id) VALUES (?, ?)", pid, pageId)
 	if err != nil {
 		return 0, err
 	}
+
+	// 获取最后插入的ID
 	id, err := result.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
+
 	return int(id), nil
 }
 
