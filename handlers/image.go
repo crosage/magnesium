@@ -155,3 +155,8 @@ func getImageByPid(ctx *fiber.Ctx) error {
 		"path":   image.Path,
 	})
 }
+
+//func getImages(ctx *fiber.Ctx) error {
+//	pageNumStr := ctx.Query("page")
+//	page
+//}

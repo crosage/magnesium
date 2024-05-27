@@ -1,7 +1,7 @@
 package structs
 
 type Author struct {
-	ID   int
-	Name string
-	UID  string
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	UID  string `json:"uid"`
 }

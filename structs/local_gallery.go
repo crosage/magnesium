@@ -1,6 +1,6 @@
 package structs
 
 type LocalGallery struct {
-	ID   int
-	Path string
+	ID   int    `json:"id"`
+	Path string `json:"path"`
 }
