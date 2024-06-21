@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"go_/structs"
 	"strings"
 )
@@ -40,6 +41,46 @@ func GetImageById(pid int) (structs.Image, error) {
 	return image, nil
 }
 
+func SearchImages(tags []string, pageNum int, pageSize int) ([]structs.Image, error) {
+	query, args := buildQuery(tags, pageNum, pageSize)
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		fmt.Println("EEEEEEEEEEEEEEEEEEEEEEEE")
+		return nil, err
+	}
+	defer rows.Close()
+	var images []structs.Image
+	for rows.Next() {
+		var image structs.Image
+		err := rows.Scan(&image.ID, &image.PID, &image.Author.ID, &image.Name, &image.Path, &image.FileType)
+		if err != nil {
+			return nil, err
+		}
+
+		image.Author, err = GetAuthorById(image.Author.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		image.Tags, err = GetTagsByPid(image.PID)
+		if err != nil {
+			return nil, err
+		}
+
+		image.Pages, err = GetPageByPid(image.PID)
+		if err != nil {
+			return nil, err
+		}
+
+		images = append(images, image)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return images, nil
+}
 func GetImagesWithPagination(pageNum int, pageSize int) ([]structs.Image, error) {
 	var images []structs.Image
 	var err error
@@ -97,12 +138,13 @@ func CheckPidExists(pid int) (bool, error) {
 	return exists, nil
 }
 
-func buildQuery(tags []string) (string, []interface{}) {
+func buildQuery(tags []string, page int, pageSize int) (string, []interface{}) {
 	var sb strings.Builder
 	var args []interface{}
+
 	sb.WriteString("SELECT i.id, i.pid, i.author_id, i.name, i.path, i.file_type ")
 	sb.WriteString("FROM image i ")
-	sb.WriteString("JOIN image_tag it ON i.id = it.image_id ")
+	sb.WriteString("JOIN image_tag it ON i.pid = it.image_id ")
 	sb.WriteString("JOIN tag t ON it.tag_id = t.id ")
 	sb.WriteString("WHERE t.name IN (")
 	for i, tag := range tags {
@@ -114,9 +156,14 @@ func buildQuery(tags []string) (string, []interface{}) {
 	}
 	sb.WriteString(") ")
 	sb.WriteString("GROUP BY i.id ")
-	sb.WriteString("HAVING COUNT(DISTINCT t.id) = ?")
-
+	sb.WriteString("HAVING COUNT(DISTINCT t.id) = ? ")
 	args = append(args, len(tags))
-
+	sb.WriteString("ORDER BY i.pid ")
+	offset := (page - 1) * pageSize
+	limit := pageSize
+	sb.WriteString("LIMIT ? OFFSET ?")
+	args = append(args, limit, offset)
+	fmt.Println("Query:", sb.String())
+	fmt.Println("Args:", args)
 	return sb.String(), args
 }

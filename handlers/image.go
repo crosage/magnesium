@@ -176,3 +176,35 @@ func getImages(ctx *fiber.Ctx) error {
 		"total":  len(images),
 	})
 }
+
+type SearchRequest struct {
+	Tags     []string `json:"tags"`
+	Page     int      `json:"page"`
+	PageSize int      `json:"size"`
+}
+
+func searchImages(ctx *fiber.Ctx) error {
+	var req SearchRequest
+
+	if err := ctx.BodyParser(&req); err != nil {
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "cannot parse JSON",
+		})
+	}
+
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 10
+	}
+	images, err := database.SearchImages(req.Tags, req.Page, req.PageSize)
+	if err != nil {
+		log.Error().Err(err)
+		return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
+	}
+	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
+		"images": images,
+		"total":  len(images),
+	})
+}
