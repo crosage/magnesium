@@ -156,7 +156,23 @@ func getImageByPid(ctx *fiber.Ctx) error {
 	})
 }
 
-//func getImages(ctx *fiber.Ctx) error {
-//	pageNumStr := ctx.Query("page")
-//	page
-//}
+func getImages(ctx *fiber.Ctx) error {
+	pageNumStr := ctx.Query("page")
+	pageSizeStr := ctx.Query("size")
+	pageNum, err := strconv.Atoi(pageNumStr)
+	pageSize, err := strconv.Atoi(pageSizeStr)
+
+	if err != nil {
+		log.Error().Err(err)
+		return sendCommonResponse(ctx, 500, "转换报文有误", nil)
+	}
+	images, err := database.GetImagesWithPagination(pageNum, pageSize)
+	if err != nil {
+		log.Error().Err(err)
+		return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
+	}
+	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
+		"images": images,
+		"total":  len(images),
+	})
+}

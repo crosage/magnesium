@@ -55,8 +55,6 @@ func initGallery(ctx *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
-
-		// 打印文件名
 		if !info.IsDir() {
 			re := regexp.MustCompile(`(\d+)_p(\d+)\.(\w+)`)
 			match := re.FindStringSubmatch(info.Name())

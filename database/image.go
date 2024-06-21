@@ -1,6 +1,9 @@
 package database
 
-import "go_/structs"
+import (
+	"go_/structs"
+	"strings"
+)
 
 func CreateImage(pid int, name string, path string, authorId int, fileType string) (int, error) {
 	result, err := db.Exec("INSERT INTO image(pid,author_id,name,path,file_type) VALUES (?,?,?,?,?)", pid, authorId, name, path, fileType)
@@ -44,6 +47,7 @@ func GetImagesWithPagination(pageNum int, pageSize int) ([]structs.Image, error)
 	rows, err := db.Query(`
 		SELECT id,pid,author_id,name,path,file_type
 		FROM image
+		ORDER BY pid
 		LIMIT ? OFFSET ?
 	`, pageSize, offset)
 	if err != nil {
@@ -91,4 +95,28 @@ func CheckPidExists(pid int) (bool, error) {
 		return false, err
 	}
 	return exists, nil
+}
+
+func buildQuery(tags []string) (string, []interface{}) {
+	var sb strings.Builder
+	var args []interface{}
+	sb.WriteString("SELECT i.id, i.pid, i.author_id, i.name, i.path, i.file_type ")
+	sb.WriteString("FROM image i ")
+	sb.WriteString("JOIN image_tag it ON i.id = it.image_id ")
+	sb.WriteString("JOIN tag t ON it.tag_id = t.id ")
+	sb.WriteString("WHERE t.name IN (")
+	for i, tag := range tags {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString("?")
+		args = append(args, tag)
+	}
+	sb.WriteString(") ")
+	sb.WriteString("GROUP BY i.id ")
+	sb.WriteString("HAVING COUNT(DISTINCT t.id) = ?")
+
+	args = append(args, len(tags))
+
+	return sb.String(), args
 }
