@@ -156,6 +156,12 @@ func getImageByPid(ctx *fiber.Ctx) error {
 	})
 }
 
+type SearchRequest struct {
+	Tags     []string `json:"tags"`
+	Page     int      `json:"page"`
+	PageSize int      `json:"size"`
+}
+
 func getImages(ctx *fiber.Ctx) error {
 	pageNumStr := ctx.Query("page")
 	pageSizeStr := ctx.Query("size")
@@ -177,12 +183,6 @@ func getImages(ctx *fiber.Ctx) error {
 	})
 }
 
-type SearchRequest struct {
-	Tags     []string `json:"tags"`
-	Page     int      `json:"page"`
-	PageSize int      `json:"size"`
-}
-
 func searchImages(ctx *fiber.Ctx) error {
 	var req SearchRequest
 
@@ -195,16 +195,30 @@ func searchImages(ctx *fiber.Ctx) error {
 	if req.Page <= 0 {
 		req.Page = 1
 	}
+
 	if req.PageSize <= 0 {
-		req.PageSize = 10
+		req.PageSize = 20
 	}
-	images, err := database.SearchImages(req.Tags, req.Page, req.PageSize)
-	if err != nil {
-		log.Error().Err(err)
-		return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
+
+	if req.Tags == nil {
+		images, err := database.GetImagesWithPagination(req.Page, req.PageSize)
+		if err != nil {
+			log.Error().Err(err)
+			return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
+		}
+		return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
+			"images": images,
+			"total":  len(images),
+		})
+	} else {
+		images, err := database.SearchImages(req.Tags, req.Page, req.PageSize)
+		if err != nil {
+			log.Error().Err(err)
+			return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
+		}
+		return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
+			"images": images,
+			"total":  len(images),
+		})
 	}
-	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
-		"images": images,
-		"total":  len(images),
-	})
 }
