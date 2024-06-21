@@ -200,7 +200,7 @@ func searchImages(ctx *fiber.Ctx) error {
 		req.PageSize = 20
 	}
 
-	if req.Tags == nil {
+	if req.Tags == nil || len(req.Tags) == 0 {
 		images, err := database.GetImagesWithPagination(req.Page, req.PageSize)
 		if err != nil {
 			log.Error().Err(err)
