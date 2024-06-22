@@ -19,6 +19,7 @@ func InitHandlers(app *fiber.App) {
 	app.Get("/api/gallery/:id/init", initGallery)
 	app.Get("/api/image/:pid", getImageByPid)
 	app.Post("/api/image", searchImages)
+	app.Post("/api/tag", getTagsWithPagination)
 
 }
 func sendCommonResponse(ctx *fiber.Ctx, code int, message string, data map[string]interface{}) error {

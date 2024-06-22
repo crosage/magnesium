@@ -8,7 +8,7 @@ import (
 func getTagsByPid() {
 
 }
-func GetTagsWithPagination(ctx *fiber.Ctx) error {
+func getTagsWithPagination(ctx *fiber.Ctx) error {
 	var req SearchRequest
 	if err := ctx.BodyParser(&req); err != nil {
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
