@@ -57,7 +57,9 @@ func SearchImages(tags []string, pageNum int, pageSize int) ([]structs.Image, in
 	if err != nil {
 		return nil, 0, err
 	}
-
+	fmt.Println("#########")
+	fmt.Println(count)
+	fmt.Println("#########")
 	for rows.Next() {
 		var image structs.Image
 		err := rows.Scan(&image.ID, &image.PID, &image.Author.ID, &image.Name, &image.Path, &image.FileType)
@@ -89,6 +91,7 @@ func SearchImages(tags []string, pageNum int, pageSize int) ([]structs.Image, in
 
 	return images, count, nil
 }
+
 func GetImagesWithPagination(pageNum int, pageSize int) ([]structs.Image, int, error) {
 	var images []structs.Image
 	var err error
@@ -189,8 +192,8 @@ func buildQuery(tags []string, page int, pageSize int) (string, []interface{}) {
 func buildCountQuery(tags []string) (string, []interface{}) {
 	var sb strings.Builder
 	var args []interface{}
-
-	sb.WriteString("SELECT COUNT(DISTINCT i.id) ")
+	sb.WriteString("SELECT COUNT(*) FROM (")
+	sb.WriteString("SELECT i.id ")
 	sb.WriteString("FROM image i ")
 	sb.WriteString("JOIN image_tag it ON i.pid = it.image_id ")
 	sb.WriteString("JOIN tag t ON it.tag_id = t.id ")
@@ -205,6 +208,7 @@ func buildCountQuery(tags []string) (string, []interface{}) {
 	sb.WriteString(") ")
 	sb.WriteString("GROUP BY i.id ")
 	sb.WriteString("HAVING COUNT(DISTINCT t.id) = ? ")
+	sb.WriteString(") AS subquery")
 	args = append(args, len(tags))
 
 	fmt.Println("Count Query:", sb.String())
