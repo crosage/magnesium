@@ -41,18 +41,18 @@ func GetImageById(pid int) (structs.Image, error) {
 	return image, nil
 }
 
-func SearchImages(tags []string, pageNum int, pageSize int) ([]structs.Image, int, error) {
+func SearchImages(tags []string, pageNum int, pageSize int, authorName string, sortBy string, sortOrder string) ([]structs.Image, int, error) {
 	var images []structs.Image
 	var count int
 
-	query, args := buildQuery(tags, pageNum, pageSize)
+	query, args := buildQuery(tags, pageNum, pageSize, authorName, sortBy, sortOrder)
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	query, args = buildCountQuery(tags)
+	query, args = buildCountQuery(tags, authorName)
 	err = db.QueryRow(query, args...).Scan(&count)
 	if err != nil {
 		return nil, 0, err
@@ -92,27 +92,49 @@ func SearchImages(tags []string, pageNum int, pageSize int) ([]structs.Image, in
 	return images, count, nil
 }
 
-func GetImagesWithPagination(pageNum int, pageSize int) ([]structs.Image, int, error) {
+func GetImagesWithPagination(pageNum int, pageSize int, authorName string, sortBy string, sortOrder string) ([]structs.Image, int, error) {
 	var images []structs.Image
 	var err error
 	var count int
 
 	offset := (pageNum - 1) * pageSize
-	rows, err := db.Query(`
-		SELECT id,pid,author_id,name,path,file_type
-		FROM image
-		ORDER BY pid
-		LIMIT ? OFFSET ?
-	`, pageSize, offset)
+
+	var sb strings.Builder
+	sb.WriteString(`
+		SELECT i.id, i.pid, i.author_id, i.name, i.path, i.file_type
+		FROM image i
+	`)
+
+	if authorName != "" {
+		sb.WriteString("JOIN author a ON i.author_id = a.id ")
+	}
+
+	if authorName != "" {
+		sb.WriteString(fmt.Sprintf("WHERE a.name = '%s' ", authorName))
+	}
+
+	if sortBy != "" {
+		sb.WriteString(fmt.Sprintf("ORDER BY %s %s ", sortBy, sortOrder))
+	} else {
+		sb.WriteString(fmt.Sprintf("ORDER BY i.pid %s", sortOrder))
+	}
+
+	sb.WriteString(fmt.Sprintf("LIMIT %d OFFSET %d", pageSize, offset))
+
+	rows, err := db.Query(sb.String())
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	err = db.QueryRow(`
+	countQuery := `
 		SELECT COUNT(*)
-		FROM image
-	`).Scan(&count)
+		FROM image i
+	`
+	if authorName != "" {
+		countQuery += "JOIN author a ON i.author_id = a.id WHERE a.name = '" + authorName + "'"
+	}
+	err = db.QueryRow(countQuery).Scan(&count)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -159,7 +181,7 @@ func CheckPidExists(pid int) (bool, error) {
 	return exists, nil
 }
 
-func buildQuery(tags []string, page int, pageSize int) (string, []interface{}) {
+func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy string, sortOrder string) (string, []interface{}) {
 	var sb strings.Builder
 	var args []interface{}
 
@@ -167,6 +189,9 @@ func buildQuery(tags []string, page int, pageSize int) (string, []interface{}) {
 	sb.WriteString("FROM image i ")
 	sb.WriteString("JOIN image_tag it ON i.pid = it.image_id ")
 	sb.WriteString("JOIN tag t ON it.tag_id = t.id ")
+	if authorName != "" {
+		sb.WriteString("JOIN author a ON i.author_id = a.id ")
+	}
 	sb.WriteString("WHERE t.name IN (")
 	for i, tag := range tags {
 		if i > 0 {
@@ -176,10 +201,26 @@ func buildQuery(tags []string, page int, pageSize int) (string, []interface{}) {
 		args = append(args, tag)
 	}
 	sb.WriteString(") ")
+	if authorName != "" {
+		sb.WriteString("AND a.name = ? ")
+		args = append(args, authorName)
+	}
 	sb.WriteString("GROUP BY i.id ")
 	sb.WriteString("HAVING COUNT(DISTINCT t.id) = ? ")
 	args = append(args, len(tags))
-	sb.WriteString("ORDER BY i.pid ")
+
+	if sortBy == "" {
+		sortBy = "i.pid"
+	}
+	if sortOrder != "ASC" && sortOrder != "DESC" {
+		sortOrder = "ASC"
+	}
+
+	sb.WriteString("ORDER BY ")
+	sb.WriteString(sortBy)
+	sb.WriteString(" ")
+	sb.WriteString(sortOrder)
+	sb.WriteString(" ")
 	offset := (page - 1) * pageSize
 	limit := pageSize
 	sb.WriteString("LIMIT ? OFFSET ?")
@@ -189,7 +230,7 @@ func buildQuery(tags []string, page int, pageSize int) (string, []interface{}) {
 	return sb.String(), args
 }
 
-func buildCountQuery(tags []string) (string, []interface{}) {
+func buildCountQuery(tags []string, authorName string) (string, []interface{}) {
 	var sb strings.Builder
 	var args []interface{}
 	sb.WriteString("SELECT COUNT(*) FROM (")
@@ -197,6 +238,11 @@ func buildCountQuery(tags []string) (string, []interface{}) {
 	sb.WriteString("FROM image i ")
 	sb.WriteString("JOIN image_tag it ON i.pid = it.image_id ")
 	sb.WriteString("JOIN tag t ON it.tag_id = t.id ")
+
+	if authorName != "" {
+		sb.WriteString("JOIN author a ON i.author_id = a.id ")
+	}
+
 	sb.WriteString("WHERE t.name IN (")
 	for i, tag := range tags {
 		if i > 0 {
@@ -206,6 +252,10 @@ func buildCountQuery(tags []string) (string, []interface{}) {
 		args = append(args, tag)
 	}
 	sb.WriteString(") ")
+	if authorName != "" {
+		sb.WriteString("AND a.name = ? ")
+		args = append(args, authorName)
+	}
 	sb.WriteString("GROUP BY i.id ")
 	sb.WriteString("HAVING COUNT(DISTINCT t.id) = ? ")
 	sb.WriteString(") AS subquery")

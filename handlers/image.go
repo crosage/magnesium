@@ -157,9 +157,12 @@ func getImageByPid(ctx *fiber.Ctx) error {
 }
 
 type SearchRequest struct {
-	Tags     []string `json:"tags"`
-	Page     int      `json:"page"`
-	PageSize int      `json:"size"`
+	Tags      []string `json:"tags"`
+	Page      int      `json:"page"`
+	PageSize  int      `json:"size"`
+	SortBy    string   `json:"sort_by"`
+	SortOrder string   `json:"sort_order"`
+	Author    string   `json:"author"`
 }
 
 func searchImages(ctx *fiber.Ctx) error {
@@ -179,9 +182,19 @@ func searchImages(ctx *fiber.Ctx) error {
 		req.PageSize = 20
 	}
 
+	if req.SortBy == "pid" || req.SortBy == "" {
+		req.SortBy = "i.pid"
+	}
+
+	if req.SortOrder == "" {
+		req.SortOrder = "DESC"
+	}
+	fmt.Println("123465")
+	fmt.Println(req.SortOrder)
+	fmt.Println("123465")
 	if req.Tags == nil || len(req.Tags) == 0 {
 		var count int
-		images, count, err := database.GetImagesWithPagination(req.Page, req.PageSize)
+		images, count, err := database.GetImagesWithPagination(req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder)
 		if err != nil {
 			log.Error().Err(err)
 			return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
@@ -192,7 +205,7 @@ func searchImages(ctx *fiber.Ctx) error {
 		})
 	} else {
 		var count int
-		images, count, err := database.SearchImages(req.Tags, req.Page, req.PageSize)
+		images, count, err := database.SearchImages(req.Tags, req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder)
 		if err != nil {
 			log.Error().Err(err)
 			return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
