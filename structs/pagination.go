@@ -1,6 +1,6 @@
 package structs
 
-type Pagination struct {
-	Page int `json:"page"`
-	Size int `json:"size"`
+type TagCount struct {
+	Name  string
+	Count int
 }

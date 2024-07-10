@@ -32,3 +32,14 @@ func getTagsWithPagination(ctx *fiber.Ctx) error {
 		"total": len(tags),
 	})
 }
+
+func getTagsCount(ctx *fiber.Ctx) error {
+	tags, err := database.GetTagCounts()
+	if err != nil {
+		return sendCommonResponse(ctx, 500, "错误", nil)
+	}
+	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
+		"tags":  tags,
+		"total": len(tags),
+	})
+}

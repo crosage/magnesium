@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"go_/structs"
+	"sort"
 )
 
 func GetOrCreateTagIdByName(name string) (int, error) {
@@ -48,4 +49,37 @@ func GetTags(page int, size int) ([]structs.Tag, error) {
 	}
 
 	return tags, nil
+}
+
+func GetTagCounts() ([]structs.TagCount, error) {
+
+	query := `
+        SELECT tag.name, COUNT(image_tag.tag_id) as count
+        FROM tag
+        INNER JOIN image_tag ON tag.id = image_tag.tag_id
+        GROUP BY tag.name;
+    `
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tagCounts []structs.TagCount
+	for rows.Next() {
+		var tagCount structs.TagCount
+		if err := rows.Scan(&tagCount.Name, &tagCount.Count); err != nil {
+			return nil, err
+		}
+		tagCounts = append(tagCounts, tagCount)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(tagCounts, func(i, j int) bool {
+		return tagCounts[i].Count > tagCounts[j].Count
+	})
+
+	return tagCounts, nil
 }
