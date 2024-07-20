@@ -54,7 +54,7 @@ func GetTags(page int, size int) ([]structs.Tag, error) {
 func GetTagCounts() ([]structs.TagCount, error) {
 
 	query := `
-        SELECT tag.name, COUNT(image_tag.tag_id) as count
+        SELECT tag.id,tag.name, COUNT(image_tag.tag_id) as count
         FROM tag
         INNER JOIN image_tag ON tag.id = image_tag.tag_id
         GROUP BY tag.name;
@@ -68,7 +68,7 @@ func GetTagCounts() ([]structs.TagCount, error) {
 	var tagCounts []structs.TagCount
 	for rows.Next() {
 		var tagCount structs.TagCount
-		if err := rows.Scan(&tagCount.Name, &tagCount.Count); err != nil {
+		if err := rows.Scan(&tagCount.ID, &tagCount.Name, &tagCount.Count); err != nil {
 			return nil, err
 		}
 		tagCounts = append(tagCounts, tagCount)

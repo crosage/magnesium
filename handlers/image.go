@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
 	"go_/database"
@@ -22,7 +21,6 @@ var ErrResponseBodyEmpty = errors.New("response body is empty or not a map")
 func getInformationFromPid(pid int) (map[string]interface{}, error) {
 	proxyURL, err := url.Parse("http://127.0.0.1:7890")
 	url := "https://www.pixiv.net/ajax/illust/" + strconv.Itoa(pid)
-	fmt.Println(url)
 	method := "GET"
 	transport := &http.Transport{
 		Proxy: http.ProxyURL(proxyURL),
@@ -105,7 +103,6 @@ func pixivHandler(pid int, path string, fileType string) error {
 	if err != nil {
 		//_, err = database.CreateImage(pid, "", path, 0)
 		if errors.Is(err, ErrResponseBodyEmpty) {
-			fmt.Println("passsss")
 			//tid, err := database.GetOrCreateTagIdByName("由于作者删除该作品无法获得tag")
 			//if err != nil {
 			//	return err
@@ -129,7 +126,6 @@ func pixivHandler(pid int, path string, fileType string) error {
 		}
 		err = database.InsertImageTag(pid, tid)
 	}
-	fmt.Println(tags)
 	return nil
 }
 
@@ -189,9 +185,6 @@ func searchImages(ctx *fiber.Ctx) error {
 	if req.SortOrder == "" {
 		req.SortOrder = "DESC"
 	}
-	fmt.Println("123465")
-	fmt.Println(req.SortOrder)
-	fmt.Println("123465")
 	if req.Tags == nil || len(req.Tags) == 0 {
 		var count int
 		images, count, err := database.GetImagesWithPagination(req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder)

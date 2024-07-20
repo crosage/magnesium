@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 	"go_/database"
 )
 
@@ -36,6 +37,7 @@ func getTagsWithPagination(ctx *fiber.Ctx) error {
 func getTagsCount(ctx *fiber.Ctx) error {
 	tags, err := database.GetTagCounts()
 	if err != nil {
+		log.Error().Msg(err.Error())
 		return sendCommonResponse(ctx, 500, "错误", nil)
 	}
 	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{

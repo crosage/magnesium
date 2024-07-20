@@ -57,9 +57,6 @@ func SearchImages(tags []string, pageNum int, pageSize int, authorName string, s
 	if err != nil {
 		return nil, 0, err
 	}
-	fmt.Println("#########")
-	fmt.Println(count)
-	fmt.Println("#########")
 	for rows.Next() {
 		var image structs.Image
 		err := rows.Scan(&image.ID, &image.PID, &image.Author.ID, &image.Name, &image.Path, &image.FileType)
@@ -225,6 +222,7 @@ func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy
 	limit := pageSize
 	sb.WriteString("LIMIT ? OFFSET ?")
 	args = append(args, limit, offset)
+
 	fmt.Println("Query:", sb.String())
 	fmt.Println("Args:", args)
 	return sb.String(), args

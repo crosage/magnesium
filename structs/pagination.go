@@ -1,6 +1,7 @@
 package structs
 
 type TagCount struct {
-	Name  string
-	Count int
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+	ID    int    `json:"id"`
 }
