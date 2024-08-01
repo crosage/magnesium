@@ -17,6 +17,7 @@ func CreateImage(pid int, name string, path string, authorId int, fileType strin
 	}
 	return int(id), nil
 }
+
 func GetImageById(pid int) (structs.Image, error) {
 	var image structs.Image
 	var err error
@@ -39,6 +40,37 @@ func GetImageById(pid int) (structs.Image, error) {
 		return image, err
 	}
 	return image, nil
+}
+
+func GetAuthorImageCounts() ([]structs.AuthorCount, error) {
+	var authorImageCounts []structs.AuthorCount
+
+	rows, err := db.Query(`
+        SELECT a.id, a.name, COUNT(i.id) AS image_count
+        FROM author a
+        INNER JOIN image i ON a.id = i.author_id
+        GROUP BY a.id, a.name
+        ORDER BY image_count DESC
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var authorImageCount structs.AuthorCount
+		err := rows.Scan(&authorImageCount.ID, &authorImageCount.Name, &authorImageCount.Count)
+		if err != nil {
+			return nil, err
+		}
+		authorImageCounts = append(authorImageCounts, authorImageCount)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return authorImageCounts, nil
 }
 
 func SearchImages(tags []string, pageNum int, pageSize int, authorName string, sortBy string, sortOrder string) ([]structs.Image, int, error) {

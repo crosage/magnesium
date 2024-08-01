@@ -34,7 +34,7 @@ func getTagsWithPagination(ctx *fiber.Ctx) error {
 	})
 }
 
-func getTagsCount(ctx *fiber.Ctx) error {
+func getTagsWithCount(ctx *fiber.Ctx) error {
 	tags, err := database.GetTagCounts()
 	if err != nil {
 		log.Error().Msg(err.Error())
