@@ -16,7 +16,7 @@ func getAllGalleries(ctx *fiber.Ctx) error {
 	var galleries []structs.LocalGallery
 	galleries, err := database.GetAllGalleries()
 	if err != nil {
-		return sendCommonResponse(ctx, 500, "", nil)
+		return sendCommonResponse(ctx, 500, err.Error(), nil)
 	}
 	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
 		"total":     len(galleries),
@@ -28,11 +28,11 @@ func createGallery(ctx *fiber.Ctx) error {
 	var gallery structs.LocalGallery
 	err := jsoniter.Unmarshal(ctx.Body(), &gallery)
 	if err != nil {
-		return sendCommonResponse(ctx, 500, "", nil)
+		return sendCommonResponse(ctx, 500, err.Error(), nil)
 	}
 	err = database.CreateLocalGalleryPath(gallery.Path)
 	if err != nil {
-		return sendCommonResponse(ctx, 500, "", nil)
+		return sendCommonResponse(ctx, 500, err.Error(), nil)
 	}
 	return sendCommonResponse(ctx, 200, "成功", nil)
 }

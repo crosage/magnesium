@@ -87,4 +87,14 @@ func createTables() {
 	if err != nil {
 		log.Fatal().Err(err)
 	}
+
+	_, err = db.Exec(`
+	CREATE TABLE IF NOT EXISTS configuration (
+		id INTEGER PRIMARY KEY, -- Or SERIAL PRIMARY KEY for PostgreSQL, INT AUTO_INCREMENT PRIMARY KEY for MySQL
+		key TEXT UNIQUE NOT NULL,
+		value TEXT
+	);`)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
 }
