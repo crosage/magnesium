@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gofiber/fiber/v2"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/rs/zerolog/log"
 	"go_/database"
 	"go_/structs"
@@ -130,26 +132,65 @@ func pixivHandler(pid int, path string, fileType string) error {
 }
 
 func getImageByPid(ctx *fiber.Ctx) error {
-	var image structs.Image
 	var err error
 	pidStr := ctx.Params("pid")
-	pid, err := strconv.Atoi(pidStr)
-	log.Log().Msg("pid=" + pidStr)
+	log.Log().Msg("请求 PID (原始数据代理): " + pidStr)
+	proxyStr := "http://localhost:7890"
+	proxyURL, err := url.Parse(proxyStr)
+	if err != nil {
+		log.Fatal().Err(err).Str("proxy_url", proxyStr).Msg("无法解析代理 URL")
+	}
+	transport := &http.Transport{
+		Proxy: http.ProxyURL(proxyURL),
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+	pixivURL := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%s", pidStr)
+	req, err := http.NewRequest("GET", pixivURL, nil)
+
 	if err != nil {
 		log.Error().Err(err)
-		return sendCommonResponse(ctx, 500, "转换id有误", nil)
+		return sendCommonResponse(ctx, 500, "构建请求失败", nil)
 	}
-	image, err = database.GetImageById(pid)
+	Cookie := "PHPSESSID=42279487_rJJrb303dpRhJDaaQE5cAEcFabXu1wiQ; __cf_bm=rnS6u1A25agQLgs3N2Nlf2NTkPqtSAPMLCsuKJT2L2A-1744294278-1.0.1.1-a6feFGkp5NxlD7Hd127qmQbYwoV9XHdcr..sUs0JqjdmQMVngsNU.PppxVQ3oHYXe8oBHUNFrc_PmJ.QkNQbR2EVwKIdWqaf6RdTyqD7oFhEinP15IvKgGPQALF8.sP7; a_type=0; b_type=0; c_type=31; cc1=2025-04-10%2023%3A11%3A18; p_ab_d_id=22959131; p_ab_id=6; p_ab_id_2=7; privacy_policy_agreement=7; privacy_policy_notification=0; first_visit_datetime_pc=2025-02-12%2015%3A36%3A04; yuid_b=EAASQjU"
+	req.Header.Set("Cookie", Cookie)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", fmt.Sprintf("https://www.pixiv.net/artworks/%s", pidStr))
+
+	resp, err := client.Do(req)
 	if err != nil {
-		log.Error().Err(err)
-		return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
+		log.Error().Err(err).Str("pid", pidStr).Msg("发送请求到 Pixiv 失败")
+		return sendCommonResponse(ctx, fiber.StatusServiceUnavailable, "请求 Pixiv API 失败", nil)
 	}
-	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
-		"pid":    image.PID,
-		"author": image.Author,
-		"tags":   image.Tags,
-		"path":   image.Path,
-	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Error().
+			Str("pid", pidStr).
+			Int("status_code", resp.StatusCode).
+			Str("response_body", string(bodyBytes)).
+			Msg("Pixiv 返回了非 OK 状态")
+		if resp.StatusCode == http.StatusNotFound {
+			return sendCommonResponse(ctx, fiber.StatusNotFound, "Pixiv 资源未找到或 API 错误", nil)
+		}
+		return sendCommonResponse(ctx, fiber.StatusBadGateway, fmt.Sprintf("Pixiv API 返回错误状态: %d", resp.StatusCode), nil)
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Error().Err(err).Str("pid", pidStr).Msg("读取 Pixiv 响应体失败")
+		return sendCommonResponse(ctx, fiber.StatusInternalServerError, "读取 Pixiv 响应失败", nil)
+	}
+	var pixivData map[string]interface{}
+	err = jsoniter.Unmarshal(bodyBytes, &pixivData)
+	if err != nil {
+		log.Error().Err(err).Str("pid", pidStr).Str("body", string(bodyBytes)).Msg("解析 Pixiv 返回的 JSON 数据失败")
+		return sendCommonResponse(ctx, fiber.StatusInternalServerError, "解析 Pixiv 响应数据失败", nil)
+	}
+	log.Info().Str("pid", pidStr).Msg("成功获取 Pixiv 数据，通过 sendCommonResponse 代理")
+	return sendCommonResponse(ctx, http.StatusOK, "成功", pixivData)
 }
 
 type SearchRequest struct {
