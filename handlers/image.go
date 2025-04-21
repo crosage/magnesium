@@ -45,7 +45,6 @@ func getInformationFromPid(pid int) (map[string]interface{}, error) {
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 
-	//fmt.Println(res.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +56,12 @@ func getInformationFromPid(pid int) (map[string]interface{}, error) {
 	bodyContent, ok := response["body"].(map[string]interface{})
 	if !ok || bodyContent == nil {
 		log.Error().Msg("response body is empty or not a map")
-		// 在这里可以返回一个特殊的错误或 nil, nil，取决于你的需求
 		return nil, ErrResponseBodyEmpty
 	}
 
 	return bodyContent, nil
 }
+
 func getTagsFromResult(result map[string]interface{}) []string {
 	var tagNames []string
 	tags, _ := result["tags"].(map[string]interface{})
