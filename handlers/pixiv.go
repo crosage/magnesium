@@ -205,7 +205,7 @@ type FollowingRequestPayload struct {
 	Limit  *int   `json:"limit"`
 }
 
-func PostFollowingUsersHandler(ctx *fiber.Ctx) error {
+func postFollowingUsersHandler(ctx *fiber.Ctx) error {
 	var payload FollowingRequestPayload
 	if err := ctx.BodyParser(&payload); err != nil {
 		log.Error().Err(err).Str("body", string(ctx.Body())).Msg("Handler: Cannot parse request body JSON")
