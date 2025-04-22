@@ -36,12 +36,14 @@ func pixivHandler(pid int, path string, fileType string) error {
 		return err
 	}
 	name := getIllustInformationFromPixivIllust(result)
+	urls := getUrlsFromPixivIllust(result)
 	author := structs.Author{
 		Name: getUserNameFromPixivIllust(result),
 		UID:  getUserIdFromPixivIllust(result),
 	}
 	author, err = database.GetOrCreateAuthor(author)
-	_, err = database.CreateImage(pid, name, path, author.ID, fileType)
+
+	_, err = database.CreateImage(pid, name, author.ID, urls)
 	tags := getTagsFromPixivIllust(result)
 	for _, tag := range tags {
 		tid, err := database.GetOrCreateTagIdByName(tag)

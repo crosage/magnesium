@@ -7,6 +7,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/rs/zerolog/log"
 	"go_/database"
+	"go_/structs"
 	"io"
 	"net/http"
 	"net/url"
@@ -152,6 +153,37 @@ func getTagsFromPixivIllust(result map[string]interface{}) []string {
 	}
 	return tagNames
 }
+
+func getUrlsFromPixivIllust(result map[string]interface{}) structs.ImageURLs {
+	var extractedUrls structs.ImageURLs
+	urlsInterface, ok := result["urls"]
+	if !ok {
+		return extractedUrls
+	}
+
+	urlsMap, ok := urlsInterface.(map[string]interface{})
+	if !ok {
+		return extractedUrls
+	}
+	if urlValue, ok := urlsMap["original"].(string); ok {
+		extractedUrls.Original = urlValue
+	}
+	if urlValue, ok := urlsMap["mini"].(string); ok {
+		extractedUrls.Mini = urlValue
+	}
+	if urlValue, ok := urlsMap["thumb"].(string); ok {
+		extractedUrls.Thumb = urlValue
+	}
+	if urlValue, ok := urlsMap["small"].(string); ok {
+		extractedUrls.Small = urlValue
+	}
+	if urlValue, ok := urlsMap["regular"].(string); ok {
+		extractedUrls.Regular = urlValue
+	}
+
+	return extractedUrls
+}
+
 func getIllustInformationFromPixivIllust(result map[string]interface{}) string {
 	var illustTitle string
 	illustTitle = result["illustTitle"].(string)

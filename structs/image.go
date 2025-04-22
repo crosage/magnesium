@@ -1,12 +1,14 @@
 package structs
 
 type Image struct {
-	ID       int    `json:"id"`
-	PID      int    `json:"pid"`
-	Author   Author `json:"author"`
-	Tags     []Tag  `json:"tags"`
-	Name     string `json:"name"`
-	Path     string `json:"path"`
-	Pages    []Page `json:"pages"`
-	FileType string `json:"file_type"`
+	ID            int
+	PID           int
+	Author        Author
+	Name          string
+	BookmarkCount int
+	IsBookmarked  bool
+	Local         bool
+	URLs          ImageURLs
+	Tags          []Tag
+	Pages         []Page
 }

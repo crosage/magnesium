@@ -50,15 +50,21 @@ func createTables() {
 
 	// 创建Image表
 	_, err = db.Exec(`
-	CREATE TABLE IF NOT EXISTS image (
-		id INTEGER PRIMARY KEY,
-		pid INTEGER,
-		author_id INTEGER,
-		name TEXT,
-		path TEXT,
-		file_type TEXT,
-		FOREIGN KEY (author_id) REFERENCES author(id)  ON DELETE CASCADE
-	);`)
+    CREATE TABLE IF NOT EXISTS image (
+        id INTEGER PRIMARY KEY,
+        pid INTEGER,
+        author_id INTEGER,
+        name TEXT,
+        bookmark_count INTEGER DEFAULT 0,
+        is_bookmarked BOOLEAN DEFAULT FALSE,
+        local BOOLEAN DEFAULT FALSE,
+        url_original TEXT,
+        url_mini TEXT,
+        url_thumb TEXT,
+        url_small TEXT,
+        url_regular TEXT,
+        FOREIGN KEY (author_id) REFERENCES author(id) ON DELETE CASCADE
+    );`)
 	if err != nil {
 		log.Fatal().Err(err)
 	}
