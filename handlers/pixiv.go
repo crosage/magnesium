@@ -141,6 +141,33 @@ func fetchPixivIllustDataFromPixiv(pid string, proxyStr string) (map[string]inte
 	return pixivData, nil
 }
 
+func getTagsFromPixivIllust(result map[string]interface{}) []string {
+	var tagNames []string
+	tags, _ := result["tags"].(map[string]interface{})
+	tagList, _ := tags["tags"].([]interface{})
+	for _, tagItem := range tagList {
+		tagMap, _ := tagItem.(map[string]interface{})
+		tagName, _ := tagMap["tag"].(string)
+		tagNames = append(tagNames, tagName)
+	}
+	return tagNames
+}
+func getIllustInformationFromPixivIllust(result map[string]interface{}) string {
+	var illustTitle string
+	illustTitle = result["illustTitle"].(string)
+	return illustTitle
+}
+func getUserIdFromPixivIllust(result map[string]interface{}) string {
+	var userId string
+	userId = result["userId"].(string)
+	return userId
+}
+func getUserNameFromPixivIllust(result map[string]interface{}) string {
+	var userName string
+	userName = result["userName"].(string)
+	return userName
+}
+
 func getImageByPid(ctx *fiber.Ctx) error {
 	pidStr := ctx.Params("pid")
 	log.Info().Str("pid", pidStr).Msg("收到 getImageByPid 请求")
@@ -427,4 +454,64 @@ func postFollowLatestIllustsHandler(ctx *fiber.Ctx) error {
 
 	log.Info().Str("userID", userID).Int("page", page).Str("mode", mode).Msg("Handler: Successfully processed follow_latest request, sending response")
 	return sendCommonResponse(ctx, fiber.StatusOK, "成功获取关注用户的最新插画 (Successfully retrieved latest illustrations from followed users)", pixivData)
+}
+
+func fetchIllustRecommendInit(illustID string, limit int, lang string, userID string) (map[string]interface{}, error) {
+	baseURL := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%s/recommend/init", illustID)
+	params := url.Values{}
+	params.Add("limit", strconv.Itoa(limit))
+	params.Add("lang", lang)
+	fullURL := baseURL + "?" + params.Encode()
+
+	log.Debug().Str("url", fullURL).Str("illustID", illustID).Int("limit", limit).Str("lang", lang).Str("userID", userID).Msg("fetchIllustRecommendInit: Preparing request")
+	proxyURL, _ := url.Parse("http://127.0.0.1:7890")
+	transport := &http.Transport{
+		Proxy: http.ProxyURL(proxyURL),
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		log.Error().Err(err).Str("url", fullURL).Msg("fetchIllustRecommendInit: Failed to create request object")
+		return nil, fmt.Errorf("%w: creating request: %w", ErrInternalSetupFailed, err)
+	}
+	err = setPixivHeaders(req, userID)
+	if err != nil {
+		log.Error().Err(err).Msg("fetchIllustRecommendInit: Failed to set common headers")
+		return nil, fmt.Errorf("%w: setting common headers: %w", ErrInternalSetupFailed, err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Referer", fmt.Sprintf("https://www.pixiv.net/artworks/%s", illustID))
+	req.Header.Set("x-user-id", userID)
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Error().Err(err).Str("url", fullURL).Str("illustID", illustID).Str("userID", userID).Msg("fetchIllustRecommendInit: Failed to execute request to Pixiv")
+		return nil, fmt.Errorf("%w: executing request: %w", ErrPixivRequestFailed, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(res.Body)
+		log.Error().Int("status", res.StatusCode).Str("body", string(bodyBytes)).Str("url", fullURL).Str("illustID", illustID).Msg("fetchIllustRecommendInit: Pixiv returned non-OK status")
+		return nil, fmt.Errorf("%w: status code %d", ErrPixivBadStatus, res.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Error().Err(err).Str("url", fullURL).Str("illustID", illustID).Msg("fetchIllustRecommendInit: Failed to read response body")
+		return nil, fmt.Errorf("%w: reading body: %w", ErrPixivReadBodyFailed, err)
+	}
+
+	var pixivData map[string]interface{}
+	err = jsoniter.Unmarshal(bodyBytes, &pixivData)
+	if err != nil {
+		log.Error().Err(err).Str("body", string(bodyBytes)).Str("url", fullURL).Msg("fetchIllustRecommendInit: Failed to parse JSON")
+		return nil, fmt.Errorf("%w: unmarshaling json: %w", ErrPixivParseFailed, err)
+	}
+
+	log.Debug().Str("illustID", illustID).Int("limit", limit).Str("userID", userID).Msg("fetchIllustRecommendInit: Successfully fetched and parsed data")
+	return pixivData, nil
 }
