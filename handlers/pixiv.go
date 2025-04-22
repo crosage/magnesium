@@ -75,7 +75,7 @@ func setPixivHeaders(req *http.Request, pid string) error {
 
 var ErrPixivNotFound = errors.New("pixiv resource not found")
 
-func fetchPixivIllustData(pid string, proxyStr string) (map[string]interface{}, error) {
+func fetchPixivIllustDataFromPixiv(pid string, proxyStr string) (map[string]interface{}, error) {
 	log.Debug().Str("pid", pid).Str("proxy", proxyStr).Msg("开始获取 Pixiv 数据")
 	transport := &http.Transport{}
 	if proxyStr != "" {
@@ -145,7 +145,7 @@ func getImageByPid(ctx *fiber.Ctx) error {
 	pidStr := ctx.Params("pid")
 	log.Info().Str("pid", pidStr).Msg("收到 getImageByPid 请求")
 	proxyStr := "http://localhost:7890"
-	pixivData, err := fetchPixivIllustData(pidStr, proxyStr)
+	pixivData, err := fetchPixivIllustDataFromPixiv(pidStr, proxyStr)
 	if err != nil {
 		log.Warn().Err(err).Str("pid", pidStr).Msg("获取 Pixiv 数据失败")
 		if errors.Is(err, ErrPixivNotFound) {
@@ -165,7 +165,7 @@ func getImageByPid(ctx *fiber.Ctx) error {
 	return sendCommonResponse(ctx, http.StatusOK, "成功", pixivData)
 }
 
-func fetchPixivFollowing(userID string, offset int, limit int) (map[string]interface{}, error) {
+func fetchPixivFollowingFromPixiv(userID string, offset int, limit int) (map[string]interface{}, error) {
 	baseURL := fmt.Sprintf("https://www.pixiv.net/ajax/user/%s/following", userID)
 	params := url.Values{}
 	params.Add("offset", strconv.Itoa(offset))
@@ -176,7 +176,7 @@ func fetchPixivFollowing(userID string, offset int, limit int) (map[string]inter
 	params.Add("lang", "zh")
 	fullURL := baseURL + "?" + params.Encode()
 
-	log.Debug().Str("url", fullURL).Str("userID", userID).Msg("fetchPixivFollowing: Preparing request")
+	log.Debug().Str("url", fullURL).Str("userID", userID).Msg("fetchPixivFollowingFromPixiv: Preparing request")
 
 	proxyURL, _ := url.Parse("http://127.0.0.1:7890")
 	transport := &http.Transport{
@@ -188,13 +188,13 @@ func fetchPixivFollowing(userID string, offset int, limit int) (map[string]inter
 
 	req, err := http.NewRequest("GET", fullURL, nil)
 	if err != nil {
-		log.Error().Err(err).Msg("fetchPixivFollowing: Failed to create request object")
+		log.Error().Err(err).Msg("fetchPixivFollowingFromPixiv: Failed to create request object")
 		return nil, fmt.Errorf("%w: creating request: %w", ErrInternalSetupFailed, err)
 	}
 
 	err = setPixivHeaders(req, "")
 	if err != nil {
-		log.Error().Err(err).Msg("fetchPixivFollowing: Failed to set common headers")
+		log.Error().Err(err).Msg("fetchPixivFollowingFromPixiv: Failed to set common headers")
 		return nil, fmt.Errorf("%w: setting common headers: %w", ErrInternalSetupFailed, err)
 	}
 	req.Header.Set("Referer", fmt.Sprintf("https://www.pixiv.net/users/%s/following", userID))
@@ -202,31 +202,31 @@ func fetchPixivFollowing(userID string, offset int, limit int) (map[string]inter
 
 	res, err := client.Do(req)
 	if err != nil {
-		log.Error().Err(err).Str("userID", userID).Msg("fetchPixivFollowing: Failed to execute request to Pixiv")
+		log.Error().Err(err).Str("userID", userID).Msg("fetchPixivFollowingFromPixiv: Failed to execute request to Pixiv")
 		return nil, fmt.Errorf("%w: %w", ErrPixivRequestFailed, err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(res.Body)
-		log.Error().Int("status", res.StatusCode).Str("body", string(bodyBytes)).Str("userID", userID).Msg("fetchPixivFollowing: Pixiv returned non-OK status")
+		log.Error().Int("status", res.StatusCode).Str("body", string(bodyBytes)).Str("userID", userID).Msg("fetchPixivFollowingFromPixiv: Pixiv returned non-OK status")
 		return nil, fmt.Errorf("%w: status code %d", ErrPixivBadStatus, res.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Error().Err(err).Str("userID", userID).Msg("fetchPixivFollowing: Failed to read response body")
+		log.Error().Err(err).Str("userID", userID).Msg("fetchPixivFollowingFromPixiv: Failed to read response body")
 		return nil, fmt.Errorf("%w: %w", ErrPixivReadBodyFailed, err)
 	}
 
 	var pixivData map[string]interface{}
 	err = jsoniter.Unmarshal(bodyBytes, &pixivData)
 	if err != nil {
-		log.Error().Err(err).Str("body", string(bodyBytes)).Msg("fetchPixivFollowing: Failed to parse JSON")
+		log.Error().Err(err).Str("body", string(bodyBytes)).Msg("fetchPixivFollowingFromPixiv: Failed to parse JSON")
 		return nil, fmt.Errorf("%w: %w", ErrPixivParseFailed, err)
 	}
 
-	log.Debug().Str("userID", userID).Msg("fetchPixivFollowing: Successfully fetched and parsed data")
+	log.Debug().Str("userID", userID).Msg("fetchPixivFollowingFromPixiv: Successfully fetched and parsed data")
 	return pixivData, nil
 }
 
@@ -272,10 +272,10 @@ func postFollowingUsersHandler(ctx *fiber.Ctx) error {
 
 	log.Info().Str("userID", userID).Int("offset", offset).Int("limit", limit).Msg("Handler: Processing request for user following list")
 
-	pixivData, err := fetchPixivFollowing(userID, offset, limit)
+	pixivData, err := fetchPixivFollowingFromPixiv(userID, offset, limit)
 
 	if err != nil {
-		log.Error().Err(err).Str("userID", userID).Msg("Handler: Error received from fetchPixivFollowing")
+		log.Error().Err(err).Str("userID", userID).Msg("Handler: Error received from fetchPixivFollowingFromPixiv")
 		if errors.Is(err, ErrInternalSetupFailed) {
 			return sendCommonResponse(ctx, fiber.StatusInternalServerError, "内部服务器设置错误 (Internal server setup error)", nil)
 		} else if errors.Is(err, ErrPixivRequestFailed) {
@@ -293,4 +293,138 @@ func postFollowingUsersHandler(ctx *fiber.Ctx) error {
 	}
 	log.Info().Str("userID", userID).Msg("Handler: Successfully processed request, sending response")
 	return sendCommonResponse(ctx, fiber.StatusOK, "成功获取关注列表 (Successfully retrieved following list)", pixivData)
+}
+
+func fetchFollowLatestIllustsFromPixiv(page int, mode, lang, userID string) (map[string]interface{}, error) {
+	//userID仅用于设置请求头
+	baseURL := "https://www.pixiv.net/ajax/follow_latest/illust"
+	params := url.Values{}
+	params.Add("p", strconv.Itoa(page))
+	params.Add("mode", mode)
+	params.Add("lang", lang)
+	fullURL := baseURL + "?" + params.Encode()
+	log.Debug().Str("url", fullURL).Int("page", page).Str("mode", mode).Str("userID", userID).Msg("fetchFollowLatestIllusts: Preparing request")
+	proxyURL, _ := url.Parse("http://127.0.0.1:7890")
+	transport := &http.Transport{
+		Proxy: http.ProxyURL(proxyURL),
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		log.Error().Err(err).Str("url", fullURL).Msg("fetchFollowLatestIllusts: Failed to create request object")
+		return nil, fmt.Errorf("%w: creating request: %w", ErrInternalSetupFailed, err)
+	}
+
+	err = setPixivHeaders(req, userID)
+	if err != nil {
+		log.Error().Err(err).Msg("fetchFollowLatestIllusts: Failed to set common headers")
+		return nil, fmt.Errorf("%w: setting common headers: %w", ErrInternalSetupFailed, err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Referer", "https://www.pixiv.net/bookmark_new_illust.php")
+	req.Header.Set("x-user-id", userID)
+
+	res, err := client.Do(req)
+	if err != nil {
+		log.Error().Err(err).Str("url", fullURL).Str("userID", userID).Msg("fetchFollowLatestIllusts: Failed to execute request to Pixiv")
+		return nil, fmt.Errorf("%w: executing request: %w", ErrPixivRequestFailed, err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(res.Body)
+		log.Error().Int("status", res.StatusCode).Str("body", string(bodyBytes)).Str("url", fullURL).Str("userID", userID).Msg("fetchFollowLatestIllusts: Pixiv returned non-OK status")
+		return nil, fmt.Errorf("%w: status code %d", ErrPixivBadStatus, res.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Error().Err(err).Str("url", fullURL).Str("userID", userID).Msg("fetchFollowLatestIllusts: Failed to read response body")
+		return nil, fmt.Errorf("%w: reading body: %w", ErrPixivReadBodyFailed, err)
+	}
+
+	var pixivData map[string]interface{}
+	err = jsoniter.Unmarshal(bodyBytes, &pixivData)
+	if err != nil {
+		log.Error().Err(err).Str("body", string(bodyBytes)).Str("url", fullURL).Msg("fetchFollowLatestIllusts: Failed to parse JSON")
+		return nil, fmt.Errorf("%w: unmarshaling json: %w", ErrPixivParseFailed, err)
+	}
+
+	log.Debug().Int("page", page).Str("mode", mode).Str("userID", userID).Msg("fetchFollowLatestIllusts: Successfully fetched and parsed data")
+	return pixivData, nil
+}
+
+type FollowLatestRequestPayload struct {
+	UserID string  `json:"userID"`
+	Page   *int    `json:"page"`
+	Mode   *string `json:"mode"`
+	Lang   *string `json:"lang"`
+}
+
+func postFollowLatestIllustsHandler(ctx *fiber.Ctx) error {
+	var payload FollowLatestRequestPayload
+	if err := ctx.BodyParser(&payload); err != nil {
+		log.Error().Err(err).Str("body", string(ctx.Body())).Msg("Handler: Cannot parse request body JSON for follow_latest")
+		return sendCommonResponse(ctx, fiber.StatusBadRequest, "无效的请求体 JSON 格式 (Invalid request body JSON format)", nil)
+	}
+	if payload.UserID == "" {
+		log.Error().Msg("Handler: Missing or empty userID in request body for follow_latest")
+		return sendCommonResponse(ctx, fiber.StatusBadRequest, "请求体中必须包含有效的 userID (Request body must contain a valid userID)", nil)
+	}
+	userID := payload.UserID
+	defaultPage := 1
+	defaultMode := "all"
+	defaultLang := "zh"
+
+	page := defaultPage
+	if payload.Page != nil {
+		if *payload.Page >= 1 {
+			page = *payload.Page
+		} else {
+			log.Warn().Int("providedPage", *payload.Page).Msg("Handler: Provided page is invalid (< 1), using default")
+		}
+	}
+	mode := defaultMode
+	if payload.Mode != nil && *payload.Mode != "" {
+		mode = *payload.Mode
+	} else if payload.Mode != nil {
+		log.Warn().Str("providedMode", *payload.Mode).Msg("Handler: Provided mode is empty, using default")
+	}
+	lang := defaultLang
+	if payload.Lang != nil && *payload.Lang != "" {
+		lang = *payload.Lang
+	} else if payload.Lang != nil {
+		log.Warn().Str("providedLang", *payload.Lang).Msg("Handler: Provided lang is empty, using default")
+	}
+	log.Info().Str("userID", userID).Int("page", page).Str("mode", mode).Str("lang", lang).Msg("Handler: Processing request for follow latest illusts")
+	pixivData, err := fetchFollowLatestIllustsFromPixiv(page, mode, lang, userID)
+
+	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Int("page", page).Str("mode", mode).Str("lang", lang).Msg("Handler: Error received from fetchFollowLatestIllusts")
+		if errors.Is(err, ErrInternalSetupFailed) {
+			return sendCommonResponse(ctx, fiber.StatusInternalServerError, "内部服务器设置错误 (Internal server setup error)", nil)
+		} else if errors.Is(err, ErrPixivRequestFailed) {
+			return sendCommonResponse(ctx, fiber.StatusServiceUnavailable, "无法连接到 Pixiv API (Could not connect to Pixiv API)", nil)
+		} else if errors.Is(err, ErrPixivBadStatus) {
+			errMsg := fmt.Sprintf("Pixiv API 请求失败 (Pixiv API request failed): %v", err)
+			var statusCode int
+			if _, scanErr := fmt.Sscanf(err.Error(), "Pixiv API (follow_latest) 返回错误状态: %d", &statusCode); scanErr == nil {
+				if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
+					return sendCommonResponse(ctx, fiber.StatusUnauthorized, "Pixiv认证失败或无权限访问关注动态", nil)
+				}
+			}
+			return sendCommonResponse(ctx, fiber.StatusBadGateway, errMsg, nil)
+		} else if errors.Is(err, ErrPixivReadBodyFailed) {
+			return sendCommonResponse(ctx, fiber.StatusInternalServerError, "读取 Pixiv 响应失败 (Failed to read Pixiv response)", nil)
+		} else if errors.Is(err, ErrPixivParseFailed) {
+			return sendCommonResponse(ctx, fiber.StatusInternalServerError, "解析 Pixiv 响应失败 (Failed to parse Pixiv response)", nil)
+		}
+
+	}
+
+	log.Info().Str("userID", userID).Int("page", page).Str("mode", mode).Msg("Handler: Successfully processed follow_latest request, sending response")
+	return sendCommonResponse(ctx, fiber.StatusOK, "成功获取关注用户的最新插画 (Successfully retrieved latest illustrations from followed users)", pixivData)
 }
