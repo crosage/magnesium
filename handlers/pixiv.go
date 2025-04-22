@@ -73,64 +73,95 @@ func setPixivHeaders(req *http.Request, pid string) error {
 	return nil
 }
 
-func getImageByPid(ctx *fiber.Ctx) error {
-	var err error
-	pidStr := ctx.Params("pid")
-	log.Log().Msg("请求 PID (原始数据代理): " + pidStr)
-	proxyStr := "http://localhost:7890"
-	proxyURL, err := url.Parse(proxyStr)
-	if err != nil {
-		log.Fatal().Err(err).Str("proxy_url", proxyStr).Msg("无法解析代理 URL")
-	}
-	transport := &http.Transport{
-		Proxy: http.ProxyURL(proxyURL),
+var ErrPixivNotFound = errors.New("pixiv resource not found")
+
+func fetchPixivIllustData(pid string, proxyStr string) (map[string]interface{}, error) {
+	log.Debug().Str("pid", pid).Str("proxy", proxyStr).Msg("开始获取 Pixiv 数据")
+	transport := &http.Transport{}
+	if proxyStr != "" {
+		proxyURL, err := url.Parse(proxyStr)
+		if err != nil {
+			log.Error().Err(err).Str("proxy_url", proxyStr).Msg("无法解析代理 URL")
+			return nil, fmt.Errorf("代理配置错误: %w", err)
+		}
+		transport.Proxy = http.ProxyURL(proxyURL)
+		log.Debug().Str("proxy", proxyStr).Msg("使用代理")
+	} else {
+		log.Debug().Msg("不使用代理")
 	}
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   30 * time.Second,
 	}
-	pixivURL := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%s", pidStr)
+	pixivURL := fmt.Sprintf("https://www.pixiv.net/ajax/illust/%s", pid)
 	req, err := http.NewRequest("GET", pixivURL, nil)
-
 	if err != nil {
-		log.Error().Err(err)
-		return sendCommonResponse(ctx, 500, "构建请求失败", nil)
+		log.Error().Err(err).Str("pid", pid).Str("url", pixivURL).Msg("构建 Pixiv 请求失败")
+		return nil, fmt.Errorf("构建请求失败: %w", err)
 	}
-	err = setPixivHeaders(req, pidStr)
+	err = setPixivHeaders(req, pid)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("设置请求头失败: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Error().Err(err).Str("pid", pidStr).Msg("发送请求到 Pixiv 失败")
-		return sendCommonResponse(ctx, fiber.StatusServiceUnavailable, "请求 Pixiv API 失败", nil)
+		log.Error().Err(err).Str("pid", pid).Str("url", pixivURL).Msg("发送请求到 Pixiv 失败")
+		return nil, fmt.Errorf("请求 Pixiv API 失败: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		log.Error().
-			Str("pid", pidStr).
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		log.Warn().
+			Str("pid", pid).
 			Int("status_code", resp.StatusCode).
 			Str("response_body", string(bodyBytes)).
-			Msg("Pixiv 返回了非 OK 状态")
+			AnErr("read_error", readErr).
+			Msg("Pixiv API 返回了非 OK 状态")
+
 		if resp.StatusCode == http.StatusNotFound {
-			return sendCommonResponse(ctx, fiber.StatusNotFound, "Pixiv 资源未找到或 API 错误", nil)
+			return nil, ErrPixivNotFound
 		}
-		return sendCommonResponse(ctx, fiber.StatusBadGateway, fmt.Sprintf("Pixiv API 返回错误状态: %d", resp.StatusCode), nil)
+		return nil, fmt.Errorf("Pixiv API 返回错误状态: %d", resp.StatusCode)
 	}
+
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Error().Err(err).Str("pid", pidStr).Msg("读取 Pixiv 响应体失败")
-		return sendCommonResponse(ctx, fiber.StatusInternalServerError, "读取 Pixiv 响应失败", nil)
+		log.Error().Err(err).Str("pid", pid).Msg("读取 Pixiv 响应体失败")
+		return nil, fmt.Errorf("读取 Pixiv 响应失败: %w", err)
 	}
+
 	var pixivData map[string]interface{}
 	err = jsoniter.Unmarshal(bodyBytes, &pixivData)
 	if err != nil {
-		log.Error().Err(err).Str("pid", pidStr).Str("body", string(bodyBytes)).Msg("解析 Pixiv 返回的 JSON 数据失败")
-		return sendCommonResponse(ctx, fiber.StatusInternalServerError, "解析 Pixiv 响应数据失败", nil)
+		log.Error().Err(err).Str("pid", pid).Str("body", string(bodyBytes)).Msg("解析 Pixiv 返回的 JSON 数据失败")
+		return nil, fmt.Errorf("解析 Pixiv 响应数据失败: %w", err)
 	}
-	log.Info().Str("pid", pidStr).Msg("成功获取 Pixiv 数据，通过 sendCommonResponse 代理")
+
+	log.Debug().Str("pid", pid).Msg("成功获取并解析 Pixiv 数据")
+	return pixivData, nil
+}
+
+func getImageByPid(ctx *fiber.Ctx) error {
+	pidStr := ctx.Params("pid")
+	log.Info().Str("pid", pidStr).Msg("收到 getImageByPid 请求")
+	proxyStr := "http://localhost:7890"
+	pixivData, err := fetchPixivIllustData(pidStr, proxyStr)
+	if err != nil {
+		log.Warn().Err(err).Str("pid", pidStr).Msg("获取 Pixiv 数据失败")
+		if errors.Is(err, ErrPixivNotFound) {
+			return sendCommonResponse(ctx, fiber.StatusNotFound, "Pixiv 资源未找到", nil)
+		}
+		var statusCode int
+		if _, scanErr := fmt.Sscanf(err.Error(), "Pixiv API 返回错误状态: %d", &statusCode); scanErr == nil {
+			return sendCommonResponse(ctx, fiber.StatusBadGateway, fmt.Sprintf("Pixiv API 返回错误: %d", statusCode), nil)
+		}
+		if err.Error() == "设置请求头失败: 内部错误：无法获取认证信息" || err.Error() == "设置请求头失败: 内部错误：认证信息未设置" {
+			return sendCommonResponse(ctx, fiber.StatusInternalServerError, "服务器内部认证错误", nil)
+		}
+		return sendCommonResponse(ctx, fiber.StatusInternalServerError, fmt.Sprintf("处理请求时发生错误: %s", err.Error()), nil)
+	}
+
+	log.Info().Str("pid", pidStr).Msg("成功获取 Pixiv 数据，准备发送响应")
 	return sendCommonResponse(ctx, http.StatusOK, "成功", pixivData)
 }
 
