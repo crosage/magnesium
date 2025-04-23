@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"go_/structs"
 	"sort"
 )
@@ -82,4 +83,12 @@ func GetTagCounts() ([]structs.TagCount, error) {
 	})
 
 	return tagCounts, nil
+}
+
+func DeleteImageTags(pid int) error {
+	_, err := db.Exec(`DELETE FROM image_tag WHERE image_id = ?`, pid)
+	if err != nil {
+		return fmt.Errorf("failed to delete tags for pid %d: %w", pid, err)
+	}
+	return nil
 }

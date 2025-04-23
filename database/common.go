@@ -63,6 +63,7 @@ func createTables() {
         url_thumb TEXT,
         url_small TEXT,
         url_regular TEXT,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (author_id) REFERENCES author(id) ON DELETE CASCADE
     );`)
 	if err != nil {

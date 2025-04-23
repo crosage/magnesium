@@ -6,22 +6,47 @@ import (
 	"fmt"
 	"go_/structs"
 	"strings"
+	"time"
 )
 
-func CreateImage(pid int, name string, authorId int, urls structs.ImageURLs) (int, error) {
+func CreateImage(pid int, name string, authorId int, bookmarkCount int, isBookmarked bool, urls structs.ImageURLs) (int, error) {
+	nowUnix := time.Now().Unix()
 	result, err := db.Exec(`
-        INSERT INTO image(pid, author_id, name, url_original, url_mini, url_thumb, url_small, url_regular)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		pid, authorId, name, urls.Original, urls.Mini, urls.Thumb, urls.Small, urls.Regular)
+        INSERT INTO image(pid, author_id, name, url_original,, url_mini, url_thumb, url_small, url_regular,updated_at,bookmark_count,is_bookmarked)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?)`,
+		pid, authorId, name, urls.Original, urls.Mini, urls.Thumb, urls.Small, urls.Regular, nowUnix, bookmarkCount, isBookmarked)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to execute insert for pid %d: %w", pid, err)
 	}
-
 	id, err := result.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get last insert id (or id is not autoincrement?): %w", err)
+		return 0, fmt.Errorf("failed to get last insert id for pid %d: %w", pid, err)
 	}
 	return int(id), nil
+}
+
+func UpdateImage(pid int, name string, authorId int, bookmarkCount int, isBookmarked bool, urls structs.ImageURLs) error {
+	nowUnix := time.Now().Unix()
+	result, err := db.Exec(`
+        UPDATE image
+        SET author_id = ?, name = ?, url_original = ?, url_mini = ?,
+            url_thumb = ?, url_small = ?, url_regular = ?, updated_at = ?, bookmark_count = ?,is_bookmarked=?
+        WHERE pid = ?`,
+		authorId, name, urls.Original, urls.Mini, urls.Thumb, urls.Small, urls.Regular, nowUnix, bookmarkCount, isBookmarked, pid)
+	if err != nil {
+		return fmt.Errorf("failed to execute update for pid %d: %w", pid, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		fmt.Printf("Warning: could not get rows affected for update pid %d: %v\n", pid, err)
+		return nil
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("update failed for pid %d: record not found (or data was identical)", pid)
+	}
+
+	return nil
 }
 
 func GetImageById(pid int) (structs.Image, error) {
@@ -360,4 +385,28 @@ func buildCountQuery(tags []string, authorName string) (string, []interface{}) {
 	args = append(args, len(tags))
 
 	return countSb.String(), args
+}
+
+func GetAllPids() ([]int, error) {
+	rows, err := db.Query(`SELECT pid FROM image ORDER BY pid`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pids from image table: %w", err)
+	}
+	defer rows.Close()
+
+	var pids []int
+	for rows.Next() {
+		var pid int
+		if err := rows.Scan(&pid); err != nil {
+			fmt.Printf("Warning: failed to scan pid: %v\n", err)
+			continue
+		}
+		pids = append(pids, pid)
+	}
+
+	if err = rows.Err(); err != nil {
+		return pids, fmt.Errorf("error encountered during row iteration for pids: %w", err)
+	}
+
+	return pids, nil
 }
