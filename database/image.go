@@ -410,3 +410,31 @@ func GetAllPids() ([]int, error) {
 
 	return pids, nil
 }
+
+func GetPidsByBookmarkRange(minBookmarks int, maxBookmarks int) ([]int, error) {
+	query := `
+        SELECT pid 
+        FROM image 
+        WHERE bookmark_count >= ? AND bookmark_count <= ? 
+        ORDER BY pid
+    `
+
+	rows, err := db.Query(query, minBookmarks, maxBookmarks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pids by bookmark range [%d, %d]: %w", minBookmarks, maxBookmarks, err)
+	}
+	defer rows.Close()
+	var pids []int
+	for rows.Next() {
+		var pid int
+		if err := rows.Scan(&pid); err != nil {
+			fmt.Printf("Warning: failed to scan pid during bookmark range query: %v\n", err)
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	if err = rows.Err(); err != nil {
+		return pids, fmt.Errorf("error encountered during row iteration for bookmark range query [%d, %d]: %w", minBookmarks, maxBookmarks, err)
+	}
+	return pids, nil
+}

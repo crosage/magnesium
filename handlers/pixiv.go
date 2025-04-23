@@ -686,3 +686,119 @@ func triggerUpdateAllHandler(c *fiber.Ctx) error {
 		"timestamp":         time.Now(),
 	})
 }
+
+func updateAllPixivImagesChecker(concurrencyLimit int) error {
+	// 该函数仅用于再次查询bookmark为0的画作重新获取，避免因网络问题没获取到图片
+
+	log.Info().Msg("Starting update process for all Pixiv images")
+
+	pids, err := database.GetPidsByBookmarkRange(0, 0)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get all PIDs from database") // Structured error logging
+		return fmt.Errorf("failed to get pids to update: %w", err)
+	}
+
+	if len(pids) == 0 {
+		log.Info().Msg("No PIDs found in the database. Nothing to update.")
+		return nil
+	}
+
+	log.Info().
+		Int("pid_count", len(pids)).
+		Int("concurrency_limit", concurrencyLimit).
+		Msg("Found PIDs to process. Starting concurrent updates")
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, concurrencyLimit)
+	errorChan := make(chan error, len(pids))
+	var errorCount int32 = 0
+	var processedCount int32 = 0
+
+	startTime := time.Now()
+	for _, pid := range pids {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(currentPid int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			log.Debug().Int("pid", currentPid).Msg("Processing PID")
+			err := pixivHandler(currentPid)
+
+			atomic.AddInt32(&processedCount, 1)
+			currentProcessed := atomic.LoadInt32(&processedCount)
+
+			if err != nil {
+				log.Error().Err(err).Int("pid", currentPid).Msg("Error processing PID")
+				errorChan <- fmt.Errorf("PID %d: %w", currentPid, err)
+				atomic.AddInt32(&errorCount, 1)
+			} else {
+				log.Info().
+					Int("pid", currentPid).
+					Int32("processed_count", currentProcessed).
+					Int("total_pids", len(pids)).
+					Msg("Successfully processed PID")
+			}
+		}(pid)
+	}
+
+	log.Info().Msg("All processing jobs launched. Waiting for completion")
+	wg.Wait()
+	close(errorChan)
+	log.Info().Msg("All processing jobs finished")
+
+	var errorsCollected []error
+	for err := range errorChan {
+		errorsCollected = append(errorsCollected, err)
+	}
+
+	duration := time.Since(startTime)
+	finalProcessedCount := atomic.LoadInt32(&processedCount)
+	finalErrorCount := atomic.LoadInt32(&errorCount)
+
+	log.Info().
+		Dur("duration", duration).
+		Int32("processed_count", finalProcessedCount).
+		Int32("error_count", finalErrorCount).
+		Msg("Update process finished")
+
+	if len(errorsCollected) > 0 {
+		log.Warn().Msg("Update process completed with errors")
+		errorSummary := fmt.Sprintf("encountered %d errors during update:", len(errorsCollected))
+		for i, e := range errorsCollected {
+			if i < 10 {
+				errorSummary += fmt.Sprintf("\n - %v", e)
+			} else if i == 10 {
+				errorSummary += "\n - ... (more errors logged above)"
+				break
+			}
+		}
+		return errors.New(errorSummary)
+	}
+
+	log.Info().Msg("Successfully processed all PIDs without errors.")
+	return nil
+}
+
+func triggerUpdateAllHandlerChecker(c *fiber.Ctx) error {
+	limit := 1
+
+	log.Info().Int("concurrency_limit", limit).Msg("Received request to trigger Pixiv update process")
+	go func(requestedLimit int) {
+		log.Info().Int("concurrency_limit", requestedLimit).Msg("Starting background Pixiv update task...")
+		err := updateAllPixivImagesChecker(requestedLimit)
+		if err != nil {
+			log.Error().Err(err).Msg("Background Pixiv update task finished with error")
+		} else {
+			log.Info().Msg("Background Pixiv update task finished successfully")
+		}
+	}(limit)
+
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"message":           "Pixiv image update process initiated.",
+		"concurrency_limit": limit,
+		"status_check_info": "Check server logs for progress and completion status.",
+		"timestamp":         time.Now(),
+	})
+}

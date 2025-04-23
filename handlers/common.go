@@ -20,6 +20,7 @@ func InitHandlers(app *fiber.App) {
 	app.Get("/api/pixiv/cookie", getPixivCookie)
 	app.Post("/api/pixiv/cookie", updatePixivCookie)
 	app.Get("/api/pixiv/image/update", triggerUpdateAllHandler)
+	app.Get("/api/pixiv/image/checker", triggerUpdateAllHandlerChecker)
 	app.Get("/api/pixiv/image/:pid", getImageByPid)
 	app.Post("/api/pixiv/image/following", postFollowLatestIllustsHandler)
 	app.Post("/api/pixiv/usr/following", postFollowingUsersHandler)
