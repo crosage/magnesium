@@ -61,8 +61,7 @@ func initGallery(ctx *fiber.Ctx) error {
 			if match != nil {
 				pid, _ := strconv.Atoi(match[1])
 				pageId, _ := strconv.Atoi(match[2])
-				fileType := match[3]
-				err := pixivHandler(pid, folderPath.Path, fileType)
+				err := pixivHandler(pid)
 				if err != nil {
 					return sendCommonResponse(ctx, 500, "爬虫过程出现错误", nil)
 				}

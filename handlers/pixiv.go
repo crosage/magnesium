@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -130,16 +132,28 @@ func fetchPixivIllustDataFromPixiv(pid string, proxyStr string) (map[string]inte
 		log.Error().Err(err).Str("pid", pid).Msg("读取 Pixiv 响应体失败")
 		return nil, fmt.Errorf("读取 Pixiv 响应失败: %w", err)
 	}
-
 	var pixivData map[string]interface{}
 	err = jsoniter.Unmarshal(bodyBytes, &pixivData)
 	if err != nil {
 		log.Error().Err(err).Str("pid", pid).Str("body", string(bodyBytes)).Msg("解析 Pixiv 返回的 JSON 数据失败")
 		return nil, fmt.Errorf("解析 Pixiv 响应数据失败: %w", err)
 	}
-
-	log.Debug().Str("pid", pid).Msg("成功获取并解析 Pixiv 数据")
-	return pixivData, nil
+	bodyInterface, ok := pixivData["body"]
+	if !ok {
+		log.Error().Interface("response_data", pixivData).Msg("Key 'body' not found in successful Pixiv response")
+		return nil, fmt.Errorf("字段 'body' 在 Pixiv 响应中不存在")
+	}
+	if bodyInterface == nil {
+		log.Warn().Msg("Value for key 'body' is nil")
+		return nil, fmt.Errorf("字段 'body' 的值为 nil")
+	}
+	pixivIllustData, ok := bodyInterface.(map[string]interface{})
+	if !ok {
+		log.Error().Interface("value", bodyInterface).Msg("Value for key 'body' is not a map[string]interface{}")
+		return nil, fmt.Errorf("字段 'body' 的值不是预期的 map 结构 (实际类型: %T)", bodyInterface)
+	}
+	log.Debug().Msg("Successfully extracted illust data from 'body' field.")
+	return pixivIllustData, nil
 }
 
 func getTagsFromPixivIllust(result map[string]interface{}) []string {
@@ -199,7 +213,18 @@ func getUserNameFromPixivIllust(result map[string]interface{}) string {
 	userName = result["userName"].(string)
 	return userName
 }
-
+func getBookmarkCountFromPixivIllust(result map[string]interface{}) int {
+	var bookmarkCount int
+	//log.Debug().Interface("test", result).Msg("test")
+	bookmarkCount = int(result["bookmarkCount"].(float64))
+	return bookmarkCount
+}
+func getBookmarkFromPixivIllust(result map[string]interface{}) bool {
+	var isBookmarked bool
+	bookmarkDataValue, ok := result["bookmarkData"]
+	isBookmarked = ok && bookmarkDataValue != nil
+	return isBookmarked
+}
 func getImageByPid(ctx *fiber.Ctx) error {
 	pidStr := ctx.Params("pid")
 	log.Info().Str("pid", pidStr).Msg("收到 getImageByPid 请求")
@@ -546,4 +571,118 @@ func fetchIllustRecommendInit(illustID string, limit int, lang string, userID st
 
 	log.Debug().Str("illustID", illustID).Int("limit", limit).Str("userID", userID).Msg("fetchIllustRecommendInit: Successfully fetched and parsed data")
 	return pixivData, nil
+}
+
+func updateAllPixivImages(concurrencyLimit int) error {
+	log.Info().Msg("Starting update process for all Pixiv images")
+
+	pids, err := database.GetAllPids()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get all PIDs from database") // Structured error logging
+		return fmt.Errorf("failed to get pids to update: %w", err)
+	}
+
+	if len(pids) == 0 {
+		log.Info().Msg("No PIDs found in the database. Nothing to update.")
+		return nil
+	}
+
+	log.Info().
+		Int("pid_count", len(pids)).
+		Int("concurrency_limit", concurrencyLimit).
+		Msg("Found PIDs to process. Starting concurrent updates")
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, concurrencyLimit)
+	errorChan := make(chan error, len(pids))
+	var errorCount int32 = 0
+	var processedCount int32 = 0
+
+	startTime := time.Now()
+	for _, pid := range pids {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(currentPid int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			log.Debug().Int("pid", currentPid).Msg("Processing PID")
+			err := pixivHandler(currentPid)
+
+			atomic.AddInt32(&processedCount, 1)
+			currentProcessed := atomic.LoadInt32(&processedCount)
+
+			if err != nil {
+				log.Error().Err(err).Int("pid", currentPid).Msg("Error processing PID")
+				errorChan <- fmt.Errorf("PID %d: %w", currentPid, err)
+				atomic.AddInt32(&errorCount, 1)
+			} else {
+				log.Info().
+					Int("pid", currentPid).
+					Int32("processed_count", currentProcessed).
+					Int("total_pids", len(pids)).
+					Msg("Successfully processed PID")
+			}
+		}(pid)
+	}
+
+	log.Info().Msg("All processing jobs launched. Waiting for completion")
+	wg.Wait()
+	close(errorChan)
+	log.Info().Msg("All processing jobs finished")
+
+	var errorsCollected []error
+	for err := range errorChan {
+		errorsCollected = append(errorsCollected, err)
+	}
+
+	duration := time.Since(startTime)
+	finalProcessedCount := atomic.LoadInt32(&processedCount)
+	finalErrorCount := atomic.LoadInt32(&errorCount)
+
+	log.Info().
+		Dur("duration", duration).
+		Int32("processed_count", finalProcessedCount).
+		Int32("error_count", finalErrorCount).
+		Msg("Update process finished")
+
+	if len(errorsCollected) > 0 {
+		log.Warn().Msg("Update process completed with errors")
+		errorSummary := fmt.Sprintf("encountered %d errors during update:", len(errorsCollected))
+		for i, e := range errorsCollected {
+			if i < 10 {
+				errorSummary += fmt.Sprintf("\n - %v", e)
+			} else if i == 10 {
+				errorSummary += "\n - ... (more errors logged above)"
+				break
+			}
+		}
+		return errors.New(errorSummary)
+	}
+
+	log.Info().Msg("Successfully processed all PIDs without errors.")
+	return nil
+}
+
+func triggerUpdateAllHandler(c *fiber.Ctx) error {
+	limit := 1
+
+	log.Info().Int("concurrency_limit", limit).Msg("Received request to trigger Pixiv update process")
+	go func(requestedLimit int) {
+		log.Info().Int("concurrency_limit", requestedLimit).Msg("Starting background Pixiv update task...")
+		err := updateAllPixivImages(requestedLimit)
+		if err != nil {
+			log.Error().Err(err).Msg("Background Pixiv update task finished with error")
+		} else {
+			log.Info().Msg("Background Pixiv update task finished successfully")
+		}
+	}(limit)
+
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"message":           "Pixiv image update process initiated.",
+		"concurrency_limit": limit,
+		"status_check_info": "Check server logs for progress and completion status.",
+		"timestamp":         time.Now(),
+	})
 }
