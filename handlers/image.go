@@ -90,6 +90,9 @@ func searchImages(ctx *fiber.Ctx) error {
 	var req SearchRequest
 
 	if err := ctx.BodyParser(&req); err != nil {
+		rawBody := ctx.Body() // 读取原始 Body
+		log.Printf("Received Raw Body: %s", string(rawBody))
+		log.Error().Err(err).Msg("解析报文出现错误")
 		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "cannot parse JSON",
 		})

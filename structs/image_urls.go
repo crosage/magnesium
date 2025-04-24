@@ -1,9 +1,9 @@
 package structs
 
 type ImageURLs struct {
-	Original string
-	Mini     string
-	Thumb    string
-	Small    string
-	Regular  string
+	Original string `json:"original"`
+	Mini     string `json:"mini"`
+	Thumb    string `json:"thumb"`
+	Small    string `json:"small"`
+	Regular  string `json:"regular"`
 }
