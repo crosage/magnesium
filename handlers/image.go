@@ -113,6 +113,7 @@ func searchImages(ctx *fiber.Ctx) error {
 	if req.SortOrder == "" {
 		req.SortOrder = "DESC"
 	}
+
 	if req.Tags == nil || len(req.Tags) == 0 {
 		var count int
 		images, count, err := database.GetImagesWithPagination(req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder)

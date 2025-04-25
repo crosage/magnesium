@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"go_/structs"
 	"strings"
 	"time"
@@ -194,8 +195,7 @@ func GetImagesWithPagination(pageNum int, pageSize int, authorName string, sortB
 	}
 	offset := (pageNum - 1) * pageSize
 
-	selectClause := `SELECT i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
-                        i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `
+	selectClause := `SELECT i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `
 	fromClause := ` FROM image i `
 	var joinClause strings.Builder
 	var whereClause strings.Builder
@@ -203,9 +203,11 @@ func GetImagesWithPagination(pageNum int, pageSize int, authorName string, sortB
 
 	if authorName != "" {
 		joinClause.WriteString(" JOIN author a ON i.author_id = a.id ")
-		whereClause.WriteString(" WHERE a.name = ? ")
+		whereClause.WriteString(" WHERE a.name = ? AND i.url_regular IS NOT NULL")
 		args = append(args, authorName)
 		countArgs = append(countArgs, authorName)
+	} else {
+		whereClause.WriteString("WHERE i.url_regular IS NOT NULL")
 	}
 
 	dbSortColumn := "i.pid"
@@ -229,7 +231,7 @@ func GetImagesWithPagination(pageNum int, pageSize int, authorName string, sortB
 	queryBuilder.WriteString(orderClause.String())
 	queryBuilder.WriteString(" LIMIT ? OFFSET ? ")
 	args = append(args, pageSize, offset)
-
+	log.Info().Msg(queryBuilder.String())
 	rows, err := db.Query(queryBuilder.String(), args...)
 	if err != nil {
 		return nil, 0, err
@@ -317,7 +319,7 @@ func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy
 	}
 	sb.WriteString(strings.Join(placeholders, ", "))
 	sb.WriteString(") ")
-
+	sb.WriteString(" AND i.url_regular IS NOT NULL ")
 	if authorName != "" {
 		sb.WriteString(" AND a.name = ? ")
 		args = append(args, authorName)
