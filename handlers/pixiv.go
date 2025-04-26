@@ -153,6 +153,54 @@ func fetchPixivIllustDataFromPixiv(pid string, proxyStr string) (map[string]inte
 		return nil, fmt.Errorf("字段 'body' 的值不是预期的 map 结构 (实际类型: %T)", bodyInterface)
 	}
 	log.Debug().Msg("Successfully extracted illust data from 'body' field.")
+	pidstr, err := strconv.Atoi(pid)
+	exists, err := database.CheckPidExists(pidstr)
+	print(exists)
+	if err != nil {
+		return nil, fmt.Errorf("error checking pid %d existence: %w", pid, err)
+	}
+	name := getIllustInformationFromPixivIllust(pixivIllustData)
+	urls := getUrlsFromPixivIllust(pixivIllustData)
+	bookmarkCount := getBookmarkCountFromPixivIllust(pixivIllustData)
+	isBookmarked := getBookmarkFromPixivIllust(pixivIllustData)
+	authorInfo := structs.Author{
+		Name: getUserNameFromPixivIllust(pixivIllustData),
+		UID:  getUserIdFromPixivIllust(pixivIllustData),
+	}
+
+	author, err := database.GetOrCreateAuthor(authorInfo)
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting or creating author for pid %d: %w", pid, err)
+	}
+
+	if exists {
+		err = database.UpdateImage(pidstr, name, author.ID, bookmarkCount, isBookmarked, urls)
+		if err != nil {
+			return nil, fmt.Errorf("error updating image record for pid %d: %w", pid, err)
+		}
+		err = database.DeleteImageTags(pidstr)
+		if err != nil {
+			return nil, fmt.Errorf("error clearing old tags for pid %d: %w", pid, err)
+		}
+	} else {
+		_, err = database.CreateImage(pidstr, name, author.ID, bookmarkCount, isBookmarked, urls)
+		if err != nil {
+			return nil, fmt.Errorf("error creating image record for pid %d: %w", pid, err)
+		}
+	}
+
+	tags := getTagsFromPixivIllust(pixivIllustData)
+	for _, tagName := range tags {
+		tid, err := database.GetOrCreateTagIdByName(tagName)
+		if err != nil {
+			return nil, fmt.Errorf("error getting or creating tag id for tag '%s' (pid %d): %w", tagName, pid, err)
+		}
+		err = database.InsertImageTag(pidstr, tid)
+		if err != nil {
+			return nil, fmt.Errorf("error inserting image-tag link for pid %d, tag id %d: %w", pid, tid, err)
+		}
+	}
 	return pixivIllustData, nil
 }
 
@@ -608,7 +656,7 @@ func updateAllPixivImages(concurrencyLimit int) error {
 			defer func() { <-sem }()
 
 			log.Debug().Int("pid", currentPid).Msg("Processing PID")
-			err := pixivHandler(currentPid)
+			_, err := fetchPixivIllustDataFromPixiv(strconv.Itoa(currentPid), "http://localhost:7890")
 
 			atomic.AddInt32(&processedCount, 1)
 			currentProcessed := atomic.LoadInt32(&processedCount)
@@ -724,7 +772,7 @@ func updateAllPixivImagesChecker(concurrencyLimit int) error {
 			defer func() { <-sem }()
 
 			log.Debug().Int("pid", currentPid).Msg("Processing PID")
-			err := pixivHandler(currentPid)
+			_, err := fetchPixivIllustDataFromPixiv(strconv.Itoa(currentPid), "http://localhost:7890")
 
 			atomic.AddInt32(&processedCount, 1)
 			currentProcessed := atomic.LoadInt32(&processedCount)

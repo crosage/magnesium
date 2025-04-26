@@ -13,7 +13,7 @@ import (
 func CreateImage(pid int, name string, authorId int, bookmarkCount int, isBookmarked bool, urls structs.ImageURLs) (int, error) {
 	nowUnix := time.Now().Unix()
 	result, err := db.Exec(`
-        INSERT INTO image(pid, author_id, name, url_original,, url_mini, url_thumb, url_small, url_regular,updated_at,bookmark_count,is_bookmarked)
+        INSERT INTO image(pid, author_id, name, url_original,url_mini, url_thumb, url_small, url_regular,updated_at,bookmark_count,is_bookmarked)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?)`,
 		pid, authorId, name, urls.Original, urls.Mini, urls.Thumb, urls.Small, urls.Regular, nowUnix, bookmarkCount, isBookmarked)
 	if err != nil {

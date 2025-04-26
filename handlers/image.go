@@ -2,80 +2,12 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/rs/zerolog/log"
 	"go_/database"
-	"go_/structs"
-	"math/rand"
-	"strconv"
-	"time"
 )
 
 var ErrResponseBodyEmpty = errors.New("response body is empty or not a map")
-
-func pixivHandler(pid int) error {
-	rand.Seed(time.Now().UnixNano())
-	min := 0.1
-	max := 5.0
-	randomDuration := time.Duration(min*float64(time.Second) + rand.Float64()*(max-min)*float64(time.Second))
-	time.Sleep(randomDuration)
-
-	exists, err := database.CheckPidExists(pid)
-	if err != nil {
-		return fmt.Errorf("error checking pid %d existence: %w", pid, err)
-	}
-	result, err := fetchPixivIllustDataFromPixiv(strconv.Itoa(pid), "http://127.0.0.1:7890")
-	if err != nil {
-		if errors.Is(err, ErrResponseBodyEmpty) {
-		}
-		return fmt.Errorf("error fetching pixiv data for pid %d: %w", pid, err)
-	}
-	name := getIllustInformationFromPixivIllust(result)
-	urls := getUrlsFromPixivIllust(result)
-	bookmarkCount := getBookmarkCountFromPixivIllust(result)
-	isBookmarked := getBookmarkFromPixivIllust(result)
-	authorInfo := structs.Author{
-		Name: getUserNameFromPixivIllust(result),
-		UID:  getUserIdFromPixivIllust(result),
-	}
-
-	author, err := database.GetOrCreateAuthor(authorInfo)
-
-	if err != nil {
-		return fmt.Errorf("error getting or creating author for pid %d: %w", pid, err)
-	}
-
-	if exists {
-		err = database.UpdateImage(pid, name, author.ID, bookmarkCount, isBookmarked, urls)
-		if err != nil {
-			return fmt.Errorf("error updating image record for pid %d: %w", pid, err)
-		}
-		err = database.DeleteImageTags(pid)
-		if err != nil {
-			return fmt.Errorf("error clearing old tags for pid %d: %w", pid, err)
-		}
-	} else {
-		_, err = database.CreateImage(pid, name, author.ID, bookmarkCount, isBookmarked, urls)
-		if err != nil {
-			return fmt.Errorf("error creating image record for pid %d: %w", pid, err)
-		}
-	}
-
-	tags := getTagsFromPixivIllust(result)
-	for _, tagName := range tags {
-		tid, err := database.GetOrCreateTagIdByName(tagName)
-		if err != nil {
-			return fmt.Errorf("error getting or creating tag id for tag '%s' (pid %d): %w", tagName, pid, err)
-		}
-		err = database.InsertImageTag(pid, tid)
-		if err != nil {
-			return fmt.Errorf("error inserting image-tag link for pid %d, tag id %d: %w", pid, tid, err)
-		}
-	}
-
-	return nil
-}
 
 type SearchRequest struct {
 	Tags      []string `json:"tags"`
