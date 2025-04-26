@@ -10,12 +10,15 @@ import (
 var ErrResponseBodyEmpty = errors.New("response body is empty or not a map")
 
 type SearchRequest struct {
-	Tags      []string `json:"tags"`
-	Page      int      `json:"page"`
-	PageSize  int      `json:"size"`
-	SortBy    string   `json:"sort_by"`
-	SortOrder string   `json:"sort_order"`
-	Author    string   `json:"author"`
+	Tags             []string `json:"tags"`
+	Page             int      `json:"page"`
+	PageSize         int      `json:"size"`
+	SortBy           string   `json:"sort_by"`
+	SortOrder        string   `json:"sort_order"`
+	Author           string   `json:"author"`
+	MinBookmarkCount *int     `json:"min_bookmark_count,omitempty"`
+	MaxBookmarkCount *int     `json:"max_bookmark_count,omitempty"`
+	IsBookmarked     *bool    `json:"is_bookmarked,omitempty"`
 }
 
 func searchImages(ctx *fiber.Ctx) error {
@@ -59,7 +62,7 @@ func searchImages(ctx *fiber.Ctx) error {
 		})
 	} else {
 		var count int
-		images, count, err := database.SearchImages(req.Tags, req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder)
+		images, count, err := database.SearchImages(req.Tags, req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder, req.MinBookmarkCount, req.MaxBookmarkCount, req.IsBookmarked)
 		if err != nil {
 			log.Error().Err(err)
 			return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)

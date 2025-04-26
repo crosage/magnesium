@@ -128,11 +128,11 @@ var allowedSortOrders = map[string]bool{
 	"DESC": true,
 }
 
-func SearchImages(tags []string, pageNum int, pageSize int, authorName string, sortBy string, sortOrder string) ([]structs.Image, int, error) {
+func SearchImages(tags []string, pageNum int, pageSize int, authorName string, sortBy string, sortOrder string, minBookmarkCount *int, maxBookmarkCount *int, isBookmarked *bool) ([]structs.Image, int, error) {
 	var images []structs.Image
 	var count int
 
-	query, args := buildQuery(tags, pageNum, pageSize, authorName, sortBy, sortOrder)
+	query, args := buildQuery(tags, pageNum, pageSize, authorName, sortBy, sortOrder, minBookmarkCount, maxBookmarkCount, isBookmarked)
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, 0, err
@@ -297,11 +297,11 @@ func CheckPidExists(pid int) (bool, error) {
 	}
 	return exists, nil
 }
-
-func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy string, sortOrder string) (string, []interface{}) {
+func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy string, sortOrder string, minBookmarkCount *int, maxBookmarkCount *int, isBookmarked *bool) (string, []interface{}) {
 	var sb strings.Builder
 	var args []interface{}
-
+	var whereConditions []string
+	var whereArgs []interface{}
 	sb.WriteString(`SELECT i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
                        i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `)
 	sb.WriteString(" FROM image i ")
@@ -311,24 +311,51 @@ func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy
 		sb.WriteString(" JOIN author a ON i.author_id = a.id ")
 	}
 
-	sb.WriteString(" WHERE t.name IN (")
-	placeholders := make([]string, len(tags))
-	for i, tag := range tags {
-		placeholders[i] = "?"
-		args = append(args, tag)
-	}
-	sb.WriteString(strings.Join(placeholders, ", "))
-	sb.WriteString(") ")
-	sb.WriteString(" AND i.url_regular IS NOT NULL ")
+	whereConditions = append(whereConditions, "i.url_regular IS NOT NULL")
+
 	if authorName != "" {
-		sb.WriteString(" AND a.name = ? ")
-		args = append(args, authorName)
+		whereConditions = append(whereConditions, "a.name = ?")
+		whereArgs = append(whereArgs, authorName)
 	}
 
+	if minBookmarkCount != nil {
+		whereConditions = append(whereConditions, "i.bookmark_count >= ?")
+		whereArgs = append(whereArgs, *minBookmarkCount)
+	}
+
+	if maxBookmarkCount != nil {
+		whereConditions = append(whereConditions, "i.bookmark_count <= ?")
+		whereArgs = append(whereArgs, *maxBookmarkCount)
+	}
+
+	if isBookmarked != nil {
+		whereConditions = append(whereConditions, "i.is_bookmarked = ?")
+		whereArgs = append(whereArgs, *isBookmarked)
+	}
+
+	if len(whereConditions) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(whereConditions, " AND "))
+		args = append(args, whereArgs...)
+	}
 	sb.WriteString(` GROUP BY i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
                           i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `)
-	sb.WriteString(" HAVING COUNT(DISTINCT t.id) = ? ")
-	args = append(args, len(tags))
+	if len(tags) > 0 {
+		sb.WriteString(" HAVING COUNT(DISTINCT CASE WHEN t.name IN (")
+		placeholders := make([]string, len(tags))
+		tagArgs := make([]interface{}, len(tags))
+		for i, tag := range tags {
+			placeholders[i] = "?"
+			tagArgs[i] = tag
+		}
+		sb.WriteString(strings.Join(placeholders, ", "))
+		sb.WriteString(") THEN t.id END) = ? ")
+		args = append(args, tagArgs...)
+		args = append(args, len(tags))
+
+	} else {
+
+	}
 
 	dbSortColumn := "i.pid"
 	if col, ok := allowedSortColumns[sortBy]; ok && col {
