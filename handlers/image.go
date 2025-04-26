@@ -49,27 +49,14 @@ func searchImages(ctx *fiber.Ctx) error {
 		req.SortOrder = "DESC"
 	}
 
-	if req.Tags == nil || len(req.Tags) == 0 {
-		var count int
-		images, count, err := database.GetImagesWithPagination(req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder)
-		if err != nil {
-			log.Error().Err(err)
-			return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
-		}
-		return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
-			"images": images,
-			"total":  count,
-		})
-	} else {
-		var count int
-		images, count, err := database.SearchImages(req.Tags, req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder, req.MinBookmarkCount, req.MaxBookmarkCount, req.IsBookmarked)
-		if err != nil {
-			log.Error().Err(err)
-			return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
-		}
-		return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
-			"images": images,
-			"total":  count,
-		})
+	var count int
+	images, count, err := database.SearchImages(req.Tags, req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder, req.MinBookmarkCount, req.MaxBookmarkCount, req.IsBookmarked)
+	if err != nil {
+		log.Error().Err(err)
+		return sendCommonResponse(ctx, 500, "查询图片出现错误", nil)
 	}
+	return sendCommonResponse(ctx, 200, "成功", map[string]interface{}{
+		"images": images,
+		"total":  count,
+	})
 }

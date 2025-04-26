@@ -139,7 +139,9 @@ func SearchImages(tags []string, pageNum int, pageSize int, authorName string, s
 	}
 	defer rows.Close()
 
-	countQuery, countArgs := buildCountQuery(tags, authorName)
+	countQuery, countArgs := buildCountQuery(tags, authorName, minBookmarkCount, maxBookmarkCount, isBookmarked)
+	log.Debug().Str("query", countQuery).Interface("args", countArgs).Msg("Executing SearchImages count query") // Debug 日志
+
 	err = db.QueryRow(countQuery, countArgs...).Scan(&count)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -181,110 +183,6 @@ func SearchImages(tags []string, pageNum int, pageSize int, authorName string, s
 	return images, count, nil
 }
 
-func GetImagesWithPagination(pageNum int, pageSize int, authorName string, sortBy string, sortOrder string) ([]structs.Image, int, error) {
-	var images []structs.Image
-	var count int
-	var args []interface{}
-	var countArgs []interface{}
-
-	if pageNum < 1 {
-		pageNum = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	offset := (pageNum - 1) * pageSize
-
-	selectClause := `SELECT i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `
-	fromClause := ` FROM image i `
-	var joinClause strings.Builder
-	var whereClause strings.Builder
-	var orderClause strings.Builder
-
-	if authorName != "" {
-		joinClause.WriteString(" JOIN author a ON i.author_id = a.id ")
-		whereClause.WriteString(" WHERE a.name = ? AND i.url_regular IS NOT NULL")
-		args = append(args, authorName)
-		countArgs = append(countArgs, authorName)
-	} else {
-		whereClause.WriteString("WHERE i.url_regular IS NOT NULL")
-	}
-
-	dbSortColumn := "i.pid"
-	if col, ok := allowedSortColumns[sortBy]; ok && col {
-		if sortBy == "name" || sortBy == "id" || sortBy == "pid" || sortBy == "bookmark_count" {
-			dbSortColumn = "i." + sortBy
-		}
-	}
-
-	dbSortOrder := "ASC"
-	if order, ok := allowedSortOrders[strings.ToUpper(sortOrder)]; ok && order {
-		dbSortOrder = strings.ToUpper(sortOrder)
-	}
-	orderClause.WriteString(fmt.Sprintf(" ORDER BY %s %s ", dbSortColumn, dbSortOrder))
-
-	var queryBuilder strings.Builder
-	queryBuilder.WriteString(selectClause)
-	queryBuilder.WriteString(fromClause)
-	queryBuilder.WriteString(joinClause.String())
-	queryBuilder.WriteString(whereClause.String())
-	queryBuilder.WriteString(orderClause.String())
-	queryBuilder.WriteString(" LIMIT ? OFFSET ? ")
-	args = append(args, pageSize, offset)
-	log.Info().Msg(queryBuilder.String())
-	rows, err := db.Query(queryBuilder.String(), args...)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	var countQueryBuilder strings.Builder
-	countQueryBuilder.WriteString(" SELECT COUNT(i.id) ")
-	countQueryBuilder.WriteString(fromClause)
-	countQueryBuilder.WriteString(joinClause.String())
-	countQueryBuilder.WriteString(whereClause.String())
-
-	err = db.QueryRow(countQueryBuilder.String(), countArgs...).Scan(&count)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return []structs.Image{}, 0, nil
-		}
-		return nil, 0, err
-	}
-
-	for rows.Next() {
-		var image structs.Image
-		err = rows.Scan(
-			&image.ID, &image.PID, &image.Author.ID, &image.Name,
-			&image.BookmarkCount, &image.IsBookmarked, &image.Local,
-			&image.URLs.Original, &image.URLs.Mini, &image.URLs.Thumb, &image.URLs.Small, &image.URLs.Regular,
-		)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		image.Author, err = GetAuthorById(image.Author.ID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get author %d for paginated image: %w", image.Author.ID, err)
-		}
-		image.Tags, err = GetTagsByPid(image.PID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get tags for pid %d for paginated image: %w", image.PID, err)
-		}
-		image.Pages, err = GetPageByPid(image.PID)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get pages for pid %d for paginated image: %w", image.PID, err)
-		}
-		images = append(images, image)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
-	}
-
-	return images, count, nil
-}
-
 func CheckPidExists(pid int) (bool, error) {
 	var exists bool
 	query := "SELECT EXISTS(SELECT 1 FROM image WHERE pid=?)"
@@ -301,71 +199,79 @@ func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy
 	var sb strings.Builder
 	var args []interface{}
 	var whereConditions []string
-	var whereArgs []interface{}
-	sb.WriteString(`SELECT i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
+	var joinClauses []string
+
+	sb.WriteString(`SELECT DISTINCT i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
                        i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `)
+
 	sb.WriteString(" FROM image i ")
-	sb.WriteString(" JOIN image_tag it ON i.pid = it.image_id ")
-	sb.WriteString(" JOIN tag t ON it.tag_id = t.id ")
+
+	hasTags := len(tags) > 0
+
 	if authorName != "" {
-		sb.WriteString(" JOIN author a ON i.author_id = a.id ")
+		joinClauses = append(joinClauses, " JOIN author a ON i.author_id = a.id ")
+	}
+
+	if hasTags {
+		joinClauses = append(joinClauses, " JOIN image_tag it ON i.pid = it.image_id ")
+		joinClauses = append(joinClauses, " JOIN tag t ON it.tag_id = t.id ")
 	}
 
 	whereConditions = append(whereConditions, "i.url_regular IS NOT NULL")
 
 	if authorName != "" {
 		whereConditions = append(whereConditions, "a.name = ?")
-		whereArgs = append(whereArgs, authorName)
+		args = append(args, authorName)
 	}
 
 	if minBookmarkCount != nil {
 		whereConditions = append(whereConditions, "i.bookmark_count >= ?")
-		whereArgs = append(whereArgs, *minBookmarkCount)
+		args = append(args, *minBookmarkCount)
 	}
-
 	if maxBookmarkCount != nil {
 		whereConditions = append(whereConditions, "i.bookmark_count <= ?")
-		whereArgs = append(whereArgs, *maxBookmarkCount)
+		args = append(args, *maxBookmarkCount)
 	}
 
 	if isBookmarked != nil {
 		whereConditions = append(whereConditions, "i.is_bookmarked = ?")
-		whereArgs = append(whereArgs, *isBookmarked)
+		args = append(args, *isBookmarked)
+	}
+
+	if hasTags {
+		whereConditions = append(whereConditions, "t.name IN ("+strings.Repeat("?,", len(tags)-1)+"?)")
+		for _, tag := range tags {
+			args = append(args, tag)
+		}
+	}
+
+	if len(joinClauses) > 0 {
+		sb.WriteString(strings.Join(joinClauses, ""))
 	}
 
 	if len(whereConditions) > 0 {
 		sb.WriteString(" WHERE ")
 		sb.WriteString(strings.Join(whereConditions, " AND "))
-		args = append(args, whereArgs...)
 	}
-	sb.WriteString(` GROUP BY i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
-                          i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `)
-	if len(tags) > 0 {
-		sb.WriteString(" HAVING COUNT(DISTINCT CASE WHEN t.name IN (")
-		placeholders := make([]string, len(tags))
-		tagArgs := make([]interface{}, len(tags))
-		for i, tag := range tags {
-			placeholders[i] = "?"
-			tagArgs[i] = tag
-		}
-		sb.WriteString(strings.Join(placeholders, ", "))
-		sb.WriteString(") THEN t.id END) = ? ")
-		args = append(args, tagArgs...)
+
+	if hasTags {
+		sb.WriteString(` GROUP BY i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
+                               i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `)
+		sb.WriteString(" HAVING COUNT(DISTINCT t.id) = ? ")
 		args = append(args, len(tags))
-
-	} else {
-
 	}
 
 	dbSortColumn := "i.pid"
-	if col, ok := allowedSortColumns[sortBy]; ok && col {
+	safeSortBy, sortByOK := allowedSortColumns[sortBy]
+	if sortByOK && safeSortBy {
 		if sortBy == "name" || sortBy == "id" || sortBy == "pid" || sortBy == "bookmark_count" {
 			dbSortColumn = "i." + sortBy
 		}
 	}
 
-	dbSortOrder := "ASC"
-	if order, ok := allowedSortOrders[strings.ToUpper(sortOrder)]; ok && order {
+	dbSortOrder := "DESC"
+	safeSortOrder, orderOK := allowedSortOrders[strings.ToUpper(sortOrder)]
+	if orderOK && safeSortOrder {
 		dbSortOrder = strings.ToUpper(sortOrder)
 	}
 	sb.WriteString(fmt.Sprintf(" ORDER BY %s %s ", dbSortColumn, dbSortOrder))
@@ -383,35 +289,72 @@ func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy
 	return sb.String(), args
 }
 
-func buildCountQuery(tags []string, authorName string) (string, []interface{}) {
+func buildCountQuery(tags []string, authorName string, minBookmarkCount *int, maxBookmarkCount *int, isBookmarked *bool) (string, []interface{}) {
+	var countSb strings.Builder
 	var args []interface{}
-	placeholders := make([]string, len(tags))
-	for i, tag := range tags {
-		placeholders[i] = "?"
-		args = append(args, tag)
+	var whereConditions []string
+	var joinClauses []string
+
+	hasTags := len(tags) > 0
+
+	if hasTags {
+		countSb.WriteString("SELECT COUNT(*) FROM (SELECT 1 FROM image i ")
+	} else {
+		countSb.WriteString("SELECT COUNT(i.id) FROM image i ")
 	}
 
-	var countSb strings.Builder
-	countSb.WriteString("SELECT COUNT(*) FROM (")
-	countSb.WriteString("SELECT i.id ")
-	countSb.WriteString("FROM image i ")
-	countSb.WriteString("JOIN image_tag it ON i.pid = it.image_id ")
-	countSb.WriteString("JOIN tag t ON it.tag_id = t.id ")
 	if authorName != "" {
-		countSb.WriteString("JOIN author a ON i.author_id = a.id ")
+		joinClauses = append(joinClauses, " JOIN author a ON i.author_id = a.id ")
 	}
-	countSb.WriteString("WHERE t.name IN (")
-	countSb.WriteString(strings.Join(placeholders, ", "))
-	countSb.WriteString(") ")
+	if hasTags {
+		joinClauses = append(joinClauses, " JOIN image_tag it ON i.pid = it.image_id ")
+		joinClauses = append(joinClauses, " JOIN tag t ON it.tag_id = t.id ")
+	}
+
+	if len(joinClauses) > 0 {
+		if hasTags {
+			countSb.WriteString(strings.Join(joinClauses, ""))
+		} else {
+			countSb.WriteString(strings.Join(joinClauses, ""))
+		}
+	}
+
+	whereConditions = append(whereConditions, "i.url_regular IS NOT NULL")
+
 	if authorName != "" {
-		countSb.WriteString("AND a.name = ? ")
+		whereConditions = append(whereConditions, "a.name = ?")
 		args = append(args, authorName)
 	}
-	countSb.WriteString("GROUP BY i.id ")
-	countSb.WriteString("HAVING COUNT(DISTINCT t.id) = ? ")
-	countSb.WriteString(") AS matching_images")
+	if minBookmarkCount != nil {
+		whereConditions = append(whereConditions, "i.bookmark_count >= ?")
+		args = append(args, *minBookmarkCount)
+	}
+	if maxBookmarkCount != nil {
+		whereConditions = append(whereConditions, "i.bookmark_count <= ?")
+		args = append(args, *maxBookmarkCount)
+	}
+	if isBookmarked != nil {
+		whereConditions = append(whereConditions, "i.is_bookmarked = ?")
+		args = append(args, *isBookmarked)
+	}
+	if hasTags {
+		whereConditions = append(whereConditions, "t.name IN ("+strings.Repeat("?,", len(tags)-1)+"?)")
+		for _, tag := range tags {
+			args = append(args, tag)
+		}
+	}
 
-	args = append(args, len(tags))
+	if len(whereConditions) > 0 {
+		countSb.WriteString(" WHERE ")
+		countSb.WriteString(strings.Join(whereConditions, " AND "))
+	}
+
+	if hasTags {
+		countSb.WriteString(" GROUP BY i.id ")
+		countSb.WriteString(" HAVING COUNT(DISTINCT t.id) = ? ")
+		args = append(args, len(tags))
+		countSb.WriteString(") AS matching_images")
+	}
 
 	return countSb.String(), args
 }
