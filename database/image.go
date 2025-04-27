@@ -255,8 +255,7 @@ func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy
 	}
 
 	if hasTags {
-		sb.WriteString(` GROUP BY i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,
-                               i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `)
+		sb.WriteString(` GROUP BY i.id, i.pid, i.author_id, i.name, i.bookmark_count, i.is_bookmarked, i.local,i.url_original, i.url_mini, i.url_thumb, i.url_small, i.url_regular `)
 		sb.WriteString(" HAVING COUNT(DISTINCT t.id) = ? ")
 		args = append(args, len(tags))
 	}
@@ -285,7 +284,7 @@ func buildQuery(tags []string, page int, pageSize int, authorName string, sortBy
 	offset := (page - 1) * pageSize
 	sb.WriteString(" LIMIT ? OFFSET ? ")
 	args = append(args, pageSize, offset)
-
+	log.Debug().Str("构造查询字符串", sb.String()).Msg("字符串输出")
 	return sb.String(), args
 }
 
@@ -355,7 +354,7 @@ func buildCountQuery(tags []string, authorName string, minBookmarkCount *int, ma
 		args = append(args, len(tags))
 		countSb.WriteString(") AS matching_images")
 	}
-
+	log.Debug().Str("构造字符串", countSb.String()).Msg("字符串输出")
 	return countSb.String(), args
 }
 

@@ -48,7 +48,6 @@ func searchImages(ctx *fiber.Ctx) error {
 	if req.SortOrder == "" {
 		req.SortOrder = "DESC"
 	}
-
 	var count int
 	images, count, err := database.SearchImages(req.Tags, req.Page, req.PageSize, req.Author, req.SortBy, req.SortOrder, req.MinBookmarkCount, req.MaxBookmarkCount, req.IsBookmarked)
 	if err != nil {

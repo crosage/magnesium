@@ -14,6 +14,15 @@ func InitDatabase() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Fail to open database")
 	}
+	_, err = db.Exec("PRAGMA busy_timeout = 5000;")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to set busy_timeout")
+	}
+	_, err = db.Exec("PRAGMA journal_mode=WAL;")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to enable WAL journal_mode")
+	}
+
 	createTables()
 }
 func createTables() {
